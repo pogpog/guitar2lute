@@ -1,0 +1,90 @@
+import { describe, expect, it } from 'vitest';
+import { MAX_TEXT_BYTES, sniff, xmlRootName } from '../../src/import/sniff';
+
+const enc = new TextEncoder();
+const bytes = (...parts: (string | number[])[]): Uint8Array =>
+  Uint8Array.from(parts.flatMap((p) => (typeof p === 'string' ? [...enc.encode(p)] : p)));
+const latin1 = (s: string): number[] => [...s].map((c) => c.charCodeAt(0));
+const utf16 = (s: string, le: boolean): number[] => {
+  const out = le ? [0xff, 0xfe] : [0xfe, 0xff];
+  for (const c of s) {
+    const u = c.charCodeAt(0);
+    out.push(...(le ? [u & 255, u >> 8] : [u >> 8, u & 255]));
+  }
+  return out;
+};
+
+const SCORE = '<score-partwise version="4.0"><work><work-title>Étude</work-title></work></score-partwise>';
+
+describe('sniff', () => {
+  it('detects PDF at byte 0', () => {
+    expect(sniff(bytes('%PDF-1.7\n'))).toEqual({ kind: 'pdf' });
+  });
+  it('detects PDF after junk bytes', () => {
+    expect(sniff(bytes(new Array(20).fill(0x41), '%PDF-1.4'))).toEqual({ kind: 'pdf' });
+  });
+  it('detects a zip by its signature', () => {
+    expect(sniff(bytes([0x50, 0x4b, 3, 4, 0, 0]))).toEqual({ kind: 'zip' });
+  });
+  it('reads XML with a declaration', () => {
+    const s = sniff(bytes('<?xml version="1.0" encoding="UTF-8"?>\n', SCORE));
+    expect(s.kind).toBe('musicxml');
+    expect(s.kind === 'musicxml' && s.text).toContain('Étude');
+  });
+  it('reads XML starting with a DOCTYPE', () => {
+    const s = sniff(bytes('<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n', SCORE));
+    expect(s.kind).toBe('musicxml');
+  });
+  it('reads XML starting with a comment', () => {
+    expect(sniff(bytes('<!-- hi <score-timewise> -->\n', SCORE)).kind).toBe('musicxml');
+  });
+  it('reads UTF-16 LE and BE with a BOM', () => {
+    for (const le of [true, false]) {
+      const s = sniff(Uint8Array.from(utf16('<?xml version="1.0" encoding="UTF-16"?>' + SCORE, le)));
+      expect(s.kind).toBe('musicxml');
+      expect(s.kind === 'musicxml' && s.text).toContain('Étude');
+    }
+  });
+  it('skips a UTF-8 BOM before <?xml', () => {
+    const s = sniff(bytes([0xef, 0xbb, 0xbf], '<?xml version="1.0"?>', SCORE));
+    expect(s.kind).toBe('musicxml');
+    expect(s.kind === 'musicxml' && s.text.charCodeAt(0)).toBe('<'.charCodeAt(0));
+  });
+  it('decodes the declared ISO-8859-1 encoding', () => {
+    const s = sniff(bytes('<?xml version="1.0" encoding="ISO-8859-1"?><score-partwise><work-title>Caf', [0xe9], '</work-title></score-partwise>'));
+    expect(s.kind).toBe('musicxml');
+    expect(s.kind === 'musicxml' && s.text).toContain('Café');
+  });
+  it('reports score-timewise', () => {
+    expect(sniff(bytes('<score-timewise/>'))).toEqual({ kind: 'timewise' });
+  });
+  it('rejects other XML roots', () => {
+    expect(sniff(bytes('<html><body/></html>'))).toEqual({ kind: 'unknown' });
+  });
+  it('passes plain UTF-8 text through', () => {
+    expect(sniff(bytes('e|--0--|\nTitle: Café\n'))).toEqual({ kind: 'text', text: 'e|--0--|\nTitle: Café\n' });
+  });
+  it('drops a BOM from UTF-8 text', () => {
+    expect(sniff(bytes([0xef, 0xbb, 0xbf], 'e|-0-|'))).toEqual({ kind: 'text', text: 'e|-0-|' });
+  });
+  it('decodes non UTF-8 text as Windows-1252', () => {
+    expect(sniff(Uint8Array.from(latin1('Caf').concat([0xe9])))).toEqual({ kind: 'text', text: 'Café' });
+  });
+  it('refuses text over 1 MB', () => {
+    expect(sniff(new Uint8Array(MAX_TEXT_BYTES).fill(0x61)).kind).toBe('text');
+    expect(sniff(new Uint8Array(MAX_TEXT_BYTES + 1).fill(0x61))).toEqual({ kind: 'unknown' });
+  });
+  it('refuses bytes with a NUL', () => {
+    expect(sniff(bytes('abc', [0], 'def'))).toEqual({ kind: 'unknown' });
+  });
+});
+
+describe('xmlRootName', () => {
+  it('skips declaration, comments, PIs and DOCTYPE with internal subset', () => {
+    expect(xmlRootName('<?xml version="1.0"?>\n<!-- c -->\n<?pi x?>\n<!DOCTYPE a [<!ENTITY e "<b>">]>\n<a x="1"/>')).toBe('a');
+  });
+  it('returns null when there is no tag', () => {
+    expect(xmlRootName('just text')).toBeNull();
+    expect(xmlRootName('<!-- unterminated')).toBeNull();
+  });
+});

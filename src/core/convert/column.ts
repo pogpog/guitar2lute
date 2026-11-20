@@ -43,25 +43,39 @@ const byCost = (a: ColumnCandidate, b: ColumnCandidate) => a.cost - b.cost || (a
 const shapeOf = (c: ColumnCandidate) =>
   c.notes.map((n) => `${n.placement.course}:${n.placement.fret}`).sort().join(',');
 
-/** Keeps the k cheapest distinct shapes; `limit()` is the cost a newcomer must not exceed. */
+/**
+ * Keeps the k cheapest candidates; `limit()` is the cost a newcomer must not exceed.
+ * With `distinct`, candidates with the same shape count once. Only columns with two identical input
+ * pitches need it: no other note order gives the same placements, since shifts into unisons are rejected.
+ */
 class TopK {
   readonly items: ColumnCandidate[] = [];
-  constructor(private readonly k: number) {}
+  /** shapeOf(items[i]) when `distinct`, kept alongside so each candidate's shape is computed once */
+  private readonly shapes: string[] = [];
+  constructor(
+    private readonly k: number,
+    private readonly distinct = false,
+  ) {}
   limit(): number {
     return this.items.length < this.k ? Infinity : this.items[this.items.length - 1].cost;
   }
   add(c: ColumnCandidate): void {
     if (c.cost > this.limit()) return;
-    const shape = shapeOf(c);
-    const same = this.items.findIndex((x) => shapeOf(x) === shape);
+    const shape = this.distinct ? shapeOf(c) : '';
+    const same = this.distinct ? this.shapes.indexOf(shape) : -1;
     if (same >= 0) {
       if (byCost(c, this.items[same]) >= 0) return;
       this.items.splice(same, 1);
+      this.shapes.splice(same, 1);
     }
     let i = this.items.length;
     while (i > 0 && byCost(c, this.items[i - 1]) < 0) i--;
     this.items.splice(i, 0, c);
-    if (this.items.length > this.k) this.items.pop();
+    this.shapes.splice(i, 0, shape);
+    if (this.items.length > this.k) {
+      this.items.pop();
+      this.shapes.pop();
+    }
   }
 }
 
@@ -151,10 +165,11 @@ export function solveColumn(
   const forcedPenalty = penaltyOf(forced, placeable);
   const size = Math.max(1, k);
 
-  const primary = new TopK(size);
+  const distinct = new Set(pitches).size < pitches.length;
+  const primary = new TopK(size, distinct);
   search(placeable, 'direct', forced, forcedPenalty, limits, primary);
 
-  const extra = new TopK(size);
+  const extra = new TopK(size, distinct);
   const fitsAsWritten = primary.items.length > 0;
   if (!fitsAsWritten) {
     const floor = (kept: number) => kept * WEIGHTS.open; // the cheapest any placement can be

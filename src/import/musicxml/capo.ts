@@ -15,20 +15,20 @@ const ROMAN: Record<string, number> = {
 
 const SEP = '[\\s:.,;\\-–—]*';
 /** After "capo": optional "on"/"at", optional "fret", then the number. */
-const AFTER = new RegExp(`^${SEP}(?:(?:on|at)\\b${SEP})?(?:fret\\b${SEP})?(\\d{1,2}|[IVXivx]+)(?![A-Za-z0-9])`);
+const AFTER = new RegExp(`^${SEP}(?:(?:on|at)\\b${SEP})?(?:the\\b${SEP})?(?:fret\\b${SEP})?(?:the\\b${SEP})?(\\d{1,2}(?:st|nd|rd|th)?|[IVXivx]+)(?![A-Za-z0-9])`);
 
 /**
  * The capo a text names: "capo" (never "Da Capo"), then an Arabic number 1–99 or a Roman I–XII
- * ("Capo III", "capo at fret 3"). The reader range-checks the result (above 12 is not usable).
+ * ("Capo III", "capo at fret 3", "Capo on the 3rd fret"). The reader range-checks the result (above 12 is not usable).
  */
 export function capoFromText(text: string): number | null {
   for (const m of text.matchAll(/(?<![A-Za-z])capo(?![A-Za-z])/gi)) {
     const index = m.index ?? 0;
-    if (/(?<![A-Za-z])da\s+$/i.test(text.slice(0, index))) continue;
+    if (/(?<![A-Za-z])da[\s-]+$/i.test(text.slice(0, index))) continue;
     const after = AFTER.exec(text.slice(index + m[0].length));
     if (!after) continue;
     const token = after[1];
-    const value = /^\d+$/.test(token) ? Number(token) : (ROMAN[token.toUpperCase()] ?? 0);
+    const value = /^\d/.test(token) ? parseInt(token, 10) : (ROMAN[token.toUpperCase()] ?? 0);
     if (value >= 1 && value <= 99) return value;
   }
   return null;

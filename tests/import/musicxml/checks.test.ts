@@ -60,15 +60,15 @@ describe('transposition and the pitch check', () => {
   });
 
   it('names the bars whose pitches are off by one', () => {
-    const plain = n({ s: 1, f: 3 });
-    const off = n({ s: 1, f: 3, pitch: 'G#4' });
-    expect(tab([plain, plain, off, plain, off, plain]).notices).toEqual([MISMATCH('bars 3, 5')]);
-  });
-
-  it('is silent when most notes agree even if a few do not', () => {
     const ok = n({ s: 1, f: 3, pitch: 'G4' });
     const off = n({ s: 1, f: 3, pitch: 'G#4' });
-    expect(tab([ok, ok, off, ok]).notices).toEqual([]);
+    expect(tab([ok, ok, off, ok, off, ok]).notices).toEqual([MISMATCH('bars 3, 5')]);
+  });
+
+  it('names the bar of a single off note', () => {
+    const ok = n({ s: 1, f: 3, pitch: 'G4' });
+    const off = n({ s: 1, f: 3, pitch: 'G#4' });
+    expect(tab([ok, ok, off, ok, ok]).notices).toEqual([MISMATCH('bar 3')]);
   });
 
   it('accepts a capo-sized difference without a notice', () => {

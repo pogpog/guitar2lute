@@ -496,15 +496,9 @@ function tuningFromNotes(notes: TabNote[]): number[] {
   });
 }
 
-/** d = sounding pitch − (open string + fret); expected 0 or the capo for most notes, otherwise one notice naming the bars off both. */
+/** d = sounding pitch − (open string + fret); expected 0 or the capo; one notice names the bars of every note that is neither. */
 function pitchCheck(notes: TabNote[], tuning: number[], capo: number, measures: TabMeasure[], notices: Notices): void {
   const diffs = notes.map((n) => ({ n, d: (n.pitch as number) - (tuning[n.string] + n.fret) }));
-  if (diffs.length === 0) return;
-  const common = mostCommon(
-    diffs.map((x) => x.d),
-    (d) => (d === 0 ? 0 : d === capo ? 1 : 2 + Math.abs(d)),
-  );
-  if (common === 0 || common === capo) return;
   for (const { n, d } of diffs) {
     if (d !== 0 && d !== capo) notices.inBar(PITCH_CHECK, measures[n.measure].number);
   }

@@ -53,4 +53,19 @@ describe('layoutLuteTab', () => {
   it('returns an empty layout for an empty tab', () => {
     expect(layoutLuteTab([], six, 'french', 800)).toEqual({ systems: [], width: 0, height: 0 });
   });
+  it('makes room for stacked diapasons so no glyph leaves its system or meets the next one', () => {
+    const thirteen = findPreset('lute-13-baroque-dm')!;
+    const stack = [note(6, 0), note(7, 0), note(8, 0), note(9, 0), note(10, 0)];
+    for (const notation of ['french', 'italian'] as const) {
+      const { systems } = layoutLuteTab([col(0, 0, stack), { kind: 'break' }, col(1, 0, stack)], thirteen, notation, 800);
+      expect(systems).toHaveLength(2);
+      for (const s of systems) {
+        for (const g of s.glyphs) {
+          expect(g.y, notation).toBeGreaterThanOrEqual(s.y + LAYOUT.lineGap / 2);
+          expect(g.y, notation).toBeLessThanOrEqual(s.y + s.height - LAYOUT.lineGap / 2);
+        }
+      }
+      expect(systems[1].y, notation).toBeGreaterThanOrEqual(systems[0].y + systems[0].height + LAYOUT.systemGap);
+    }
+  });
 });

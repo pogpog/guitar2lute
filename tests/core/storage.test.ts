@@ -79,6 +79,31 @@ describe('migrate', () => {
       expect(() => migrate(p)).toThrow(/Invalid piece \(/);
     }
   });
+  it('rejects values outside the ranges the app can produce', () => {
+    const ok = () => JSON.parse(JSON.stringify(newPiece())) as Record<string, any>;
+    const col = (string: number, fret: number) => [{ kind: 'col', col: { x: 0, notes: [{ string, fret }] } }];
+    const broken: [string, (p: any) => void][] = [
+      ['guitar.tab', (p) => { p.guitar.tab = col(9, 1); }],
+      ['guitar.tab', (p) => { p.guitar.tab = col(0, 25); }],
+      ['guitar.tuning', (p) => { p.guitar.tuning.courses = [64, 59]; }],
+      ['guitar.capo', (p) => { p.guitar.capo = 13; }],
+      ['guitar.chords', (p) => { p.guitar.chords = [{ name: '', frets: [25, 0, 0, 0, 0, 0], baseFret: 1 }]; }],
+      ['guitar.chords', (p) => { p.guitar.chords = [{ name: '', frets: [0, 0, 0, 0, 0, 0], baseFret: 0 }]; }],
+      ['lute.tuning', (p) => { p.lute.tuning.frettedCourses = 99; }],
+      ['lute.tuning', (p) => { p.lute.tuning.frettedCourses = 0; }],
+      ['lute.tuning', (p) => { p.lute.tuning.courses = [67, 200]; }],
+      ['lute.transpose', (p) => { p.lute.transpose = 13; }],
+      ['lute.maxFret', (p) => { p.lute.maxFret = 20; }],
+      ['lute.maxFret', (p) => { p.lute.maxFret = 3; }],
+      ['lute.maxStretch', (p) => { p.lute.maxStretch = 7; }],
+    ];
+    expect(() => migrate(ok())).not.toThrow();
+    for (const [field, breakIt] of broken) {
+      const p = ok();
+      breakIt(p);
+      expect(() => migrate(p), field).toThrow(`Invalid piece (${field})`);
+    }
+  });
 });
 
 describe('JSON import/export', () => {

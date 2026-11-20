@@ -51,18 +51,22 @@ function newerVersionError(v: number): Error {
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 const isInt = (v: unknown): v is number => Number.isInteger(v);
-const isStringState = (v: unknown) => v === null || v === 'x' || (isInt(v) && v >= 0);
+/** an integer in [lo, hi]: the ranges the app's own controls can produce */
+const inRange = (v: unknown, lo: number, hi: number): v is number => isInt(v) && v >= lo && v <= hi;
+const MAX_GUITAR_FRET = 24;
+const isStringState = (v: unknown) => v === null || v === 'x' || inRange(v, 0, MAX_GUITAR_FRET);
 const isPlacement = (v: unknown) => isObj(v) && isInt(v.course) && isInt(v.fret);
 const isTuning = (v: unknown) =>
   isObj(v) && typeof v.id === 'string' && typeof v.name === 'string' &&
-  Array.isArray(v.courses) && v.courses.length > 0 && v.courses.every(isInt) && isInt(v.frettedCourses);
+  Array.isArray(v.courses) && v.courses.length > 0 && v.courses.every((m) => inRange(m, 0, 127)) &&
+  inRange(v.frettedCourses, 1, v.courses.length);
 const isEvent = (v: unknown) =>
   isObj(v) &&
   (v.kind === 'bar' || v.kind === 'break' ||
     (v.kind === 'col' && isObj(v.col) && typeof v.col.x === 'number' && Array.isArray(v.col.notes) &&
-      v.col.notes.every((n) => isObj(n) && isInt(n.string) && isInt(n.fret))));
+      v.col.notes.every((n) => isObj(n) && inRange(n.string, 0, 5) && inRange(n.fret, 0, MAX_GUITAR_FRET))));
 const isChord = (v: unknown) =>
-  isObj(v) && typeof v.name === 'string' && isInt(v.baseFret) && Array.isArray(v.frets) && v.frets.length === 6 && v.frets.every(isStringState);
+  isObj(v) && typeof v.name === 'string' && inRange(v.baseFret, 1, 15) && Array.isArray(v.frets) && v.frets.length === 6 && v.frets.every(isStringState);
 const isRecordOf = (v: unknown, ok: (x: unknown) => boolean) => isObj(v) && Object.values(v).every(ok);
 
 /** Checks the whole structure, so data that parses but has the wrong shape never reaches the converter. */
@@ -71,14 +75,15 @@ function invalidField(r: Obj): string | null {
   if (typeof r.title !== 'string') return 'title';
   const g = r.guitar;
   if (!isObj(g)) return 'guitar';
-  if (!isTuning(g.tuning)) return 'guitar.tuning';
-  if (!isInt(g.capo) || g.capo < 0) return 'guitar.capo';
+  if (!isTuning(g.tuning) || (g.tuning as Obj & { courses: unknown[] }).courses.length !== 6) return 'guitar.tuning';
+  if (!inRange(g.capo, 0, 12)) return 'guitar.capo';
   if (!Array.isArray(g.chords) || !g.chords.every(isChord)) return 'guitar.chords';
   if (!Array.isArray(g.tab) || !g.tab.every(isEvent)) return 'guitar.tab';
   const l = r.lute;
   if (!isObj(l)) return 'lute';
   if (!isTuning(l.tuning)) return 'lute.tuning';
-  for (const k of ['transpose', 'maxFret', 'maxStretch']) if (!isInt(l[k])) return `lute.${k}`;
+  const ranges: [string, number, number][] = [['transpose', -12, 12], ['maxFret', 4, 12], ['maxStretch', 2, 6]];
+  for (const [k, lo, hi] of ranges) if (!inRange(l[k], lo, hi)) return `lute.${k}`;
   if (!['french', 'italian', 'modern'].includes(l.notation as string)) return 'lute.notation';
   const o = r.overrides;
   if (!isObj(o)) return 'overrides';

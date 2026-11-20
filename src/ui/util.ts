@@ -27,13 +27,20 @@ export function svgMarkup(el: SVGSVGElement): string {
   return new XMLSerializer().serializeToString(clone);
 }
 
-export function combineSvgs(els: SVGSVGElement[], gap = 12): string {
+const escapeXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** Lays the SVGs side by side in one SVG; with `labels`, each is titled (e.g. with its chord name). */
+export function combineSvgs(els: SVGSVGElement[], gap = 12, labels?: string[]): string {
+  const labelH = labels ? 18 : 0;
   let x = 0;
   let h = 0;
-  const parts = els.map((el) => {
+  const parts = els.map((el, i) => {
     const w = Number(el.getAttribute('width'));
-    h = Math.max(h, Number(el.getAttribute('height')));
-    const g = `<g transform="translate(${x},0)">${el.innerHTML}</g>`;
+    h = Math.max(h, Number(el.getAttribute('height')) + labelH);
+    const label = labels?.[i]
+      ? `<text x="${x + w / 2}" y="13" text-anchor="middle" font-size="13" font-weight="bold" fill="currentColor">${escapeXml(labels[i])}</text>`
+      : '';
+    const g = `${label}<g transform="translate(${x},${labelH})">${el.innerHTML}</g>`;
     x += w + gap;
     return g;
   });

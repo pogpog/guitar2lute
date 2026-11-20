@@ -79,7 +79,8 @@ export function App({ storage }: { storage?: StorageLike }) {
           window.alert('Open the Lute view (with some chord boxes) first.');
           return;
         }
-        downloadText(`${name}-lute-chords.svg`, combineSvgs(els), 'image/svg+xml');
+        const labels = els.map((el) => el.closest('figure')?.querySelector('.chord-title')?.textContent ?? '');
+        downloadText(`${name}-lute-chords.svg`, combineSvgs(els, 12, labels), 'image/svg+xml');
         return;
       }
       case 'print':

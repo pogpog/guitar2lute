@@ -32,6 +32,17 @@ describe('LuteChordBox', () => {
     const out = html(<LuteChordBox chord={r.chords[0]} tuning={six} notation="italian" flats={r.flats} onCycle={noop} onVoicing={noop} onPlay={noop} />);
     expect(out.match(/>2<\/text>/g)).toHaveLength(3);
   });
+  it('names the course of an open-only course whose glyph would be ambiguous', () => {
+    const dia = (course: number) => ({ name: '', chosen: 0, voicings: [{ notes: [{ placement: { course, fret: 0 }, pitch: 43, shifted: 0, pinned: false, srcNoteIndex: 0 }], dropped: [], cost: 0 }] });
+    const thirteen = findPreset('lute-13-baroque-dm')!;
+    // the open 7th course would otherwise read "a", like course 1 open
+    const fr = html(<LuteChordBox chord={dia(6)} tuning={thirteen} notation="french" flats onCycle={noop} onVoicing={noop} onPlay={noop} />);
+    expect(fr).toContain('>7:a</text>');
+    // modern notation would otherwise write every diapason as a bare 0
+    const eight = findPreset('lute-8-g')!;
+    const mo = html(<LuteChordBox chord={dia(7)} tuning={eight} notation="modern" flats onCycle={noop} onVoicing={noop} onPlay={noop} />);
+    expect(mo).toContain('>8:0</text>');
+  });
   it('writes diapasons under the diagram', () => {
     const eight = findPreset('lute-8-g')!;
     const chord = { name: 'D', chosen: 0, voicings: [{ notes: [{ placement: { course: 7, fret: 0 }, pitch: 38, shifted: 0, pinned: false, srcNoteIndex: 0 }], dropped: [], cost: 0 }] };

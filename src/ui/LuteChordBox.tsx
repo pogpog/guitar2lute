@@ -1,5 +1,5 @@
 import type { LuteChord, LuteNote, Notation, Tuning } from '../core/model';
-import { fretGlyph, noteGlyph } from '../core/notation';
+import { diapasonLabel, fretGlyph } from '../core/notation';
 import { midiToName, prettyName } from '../core/pitch';
 
 const LEFT = 18;
@@ -49,7 +49,9 @@ export function LuteChordBox({ chord, tuning, notation, flats, onCycle, onVoicin
   const xOf = (c: number) => LEFT + (lines - 1 - c) * SG;
   const yOf = (i: number) => TOP + i * FG;
   const gridBottom = yOf(rows);
-  const width = Math.max(LEFT * 2 + (lines - 1) * SG, LEFT + diapasons.length * DIAP_W);
+  // modern labels carry the course number ("13:0"), so they need more room
+  const diapW = notation === 'modern' ? DIAP_W + 8 : DIAP_W;
+  const width = Math.max(LEFT * 2 + (lines - 1) * SG, LEFT + diapasons.length * diapW);
   const height = gridBottom + (diapasons.length ? 26 : 8);
   const played = new Set(v.notes.map((n) => n.placement.course));
   const cls = (n: LuteNote, base: string) => `${base}${n.shifted ? ' shifted' : ''}${n.pinned ? ' pinned' : ''}`;
@@ -103,13 +105,13 @@ export function LuteChordBox({ chord, tuning, notation, flats, onCycle, onVoicin
             key={`d${n.srcNoteIndex}`}
             data-testid={`lute-note-${n.srcNoteIndex}`}
             className={cls(n, 'lute-dot diapason')}
-            x={LEFT + i * DIAP_W}
+            x={LEFT + i * diapW}
             y={gridBottom + 18}
             fontSize={12}
             fill="currentColor"
             onClick={() => onCycle(n.srcNoteIndex)}
           >
-            {noteGlyph(n.placement.course, n.placement.fret, notation)}
+            {diapasonLabel(n.placement.course, n.placement.fret, notation)}
           </text>
         ))}
       </svg>

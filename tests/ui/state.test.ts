@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { initialPiece, safeLoad } from '../../src/ui/state';
 import { MemoryStorage, PieceStore } from '../../src/core/storage';
 import { newPiece } from '../../src/core/piece';
-import { parseIntInRange, slug } from '../../src/ui/util';
+import { combineSvgs, parseIntInRange, slug } from '../../src/ui/util';
 
 describe('state helpers', () => {
   it('starts with a new piece when storage is empty', () => {
@@ -37,6 +37,14 @@ describe('util', () => {
     expect(parseIntInRange('10', 4, 12)).toBe(10);
     expect(parseIntInRange('40', 4, 12)).toBeNull();
     expect(parseIntInRange('2.5', 0, 12)).toBeNull();
+  });
+  it('labels each combined chord box with its name', () => {
+    const fake = (w: number) => ({ getAttribute: (a: string) => (a === 'width' ? String(w) : '50'), innerHTML: '<rect/>' }) as unknown as SVGSVGElement;
+    const out = combineSvgs([fake(40), fake(40)], 12, ['G', 'A<b>&']);
+    expect(out).toContain('>G</text>');
+    expect(out).toContain('>A&lt;b&gt;&amp;</text>');
+    expect(out).toContain('translate(52,');
+    expect(combineSvgs([fake(40)])).not.toContain('<text');
   });
   it('slugs titles for filenames', () => {
     expect(slug('  Greensleeves (arr.) ')).toBe('greensleeves-arr');

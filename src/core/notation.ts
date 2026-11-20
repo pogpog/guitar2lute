@@ -25,3 +25,12 @@ export function noteGlyph(course: number, fret: number, notation: Notation): str
   }
   return fret === 0 ? String(course + 1) : `${course + 1}:${fretGlyph(fret, 'italian')}`;
 }
+
+/**
+ * Label for an open-only course written under a chord box, where no staff position tells the courses apart:
+ * the 7th course and every modern-notation diapason get their course number (`7:a`, `8:0`).
+ */
+export function diapasonLabel(course: number, fret: number, notation: Notation): string {
+  if (notation === 'modern' || course === 6) return `${course + 1}:${fretGlyph(fret, notation)}`;
+  return noteGlyph(course, fret, notation);
+}

@@ -38,4 +38,9 @@ describe('App', () => {
     expect(out).toContain('E B E G♯ B E');
     expect(out).not.toContain('A♭');
   });
+  it('starts even when the saved index has the wrong shape', () => {
+    const s = new MemoryStorage();
+    s.setItem('g2l:index', JSON.stringify([{ id: 'a', title: { x: 1 } }, { id: 'b', title: [{}] }]));
+    expect(html(<App storage={s} />)).toContain('Guitar → Lute');
+  });
 });

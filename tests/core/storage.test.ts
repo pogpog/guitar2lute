@@ -22,6 +22,27 @@ describe('PieceStore', () => {
     s.setItem('g2l:index', '{not json');
     expect(new PieceStore(s).list()).toEqual([]);
   });
+  it('coerces index entries of the wrong shape and drops duplicates', () => {
+    const s = new MemoryStorage();
+    s.setItem(
+      'g2l:index',
+      JSON.stringify([{ id: 'a', title: { x: 1 } }, { id: 'a', title: 'dup' }, { title: 'no id' }, { id: 'b', title: 'B', updatedAt: 5 }]),
+    );
+    expect(new PieceStore(s).list()).toEqual([
+      { id: 'a', title: '', updatedAt: '' },
+      { id: 'b', title: 'B', updatedAt: '' },
+    ]);
+  });
+  it('finds saved pieces the index has lost, and keeps them on the next save', () => {
+    const s = new MemoryStorage();
+    const store = new PieceStore(s);
+    store.save(newPiece('A'));
+    store.save(newPiece('B'));
+    s.setItem('g2l:index', '{not json');
+    expect(store.list().map((m) => m.title).sort()).toEqual(['A', 'B']);
+    store.save(newPiece('C'));
+    expect(store.list().map((m) => m.title).sort()).toEqual(['A', 'B', 'C']);
+  });
   it('throws on a corrupt piece so callers can skip it', () => {
     const s = new MemoryStorage();
     s.setItem('g2l:piece:x', 'garbage');

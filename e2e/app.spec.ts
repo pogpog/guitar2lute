@@ -82,3 +82,23 @@ test('number fields can be typed digit by digit', async ({ page }) => {
   await maxFret.blur();
   await expect(maxFret).toHaveValue('10');
 });
+
+test('keeps an edit made just before the page closes', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Piece title').fill('Last second');
+  await page.reload();
+  await expect(page.getByLabel('Piece title')).toHaveValue('Last second');
+});
+
+test('explains why a saved piece cannot be opened', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    const future = { schemaVersion: 99, id: 'future', title: 'From the future', updatedAt: '2030-01-01T00:00:00.000Z' };
+    localStorage.setItem('g2l:piece:future', JSON.stringify(future));
+    localStorage.setItem('g2l:index', JSON.stringify([{ id: 'future', title: 'From the future', updatedAt: future.updatedAt }]));
+  });
+  await page.goto('/');
+  await page.getByText('From the future').click();
+  await expect(page.getByRole('alert')).toContainText('newer version');
+});

@@ -112,6 +112,12 @@ export function App({ storage }: { storage?: StorageLike }) {
         onToggleSidebar={() => setSidebarOpen((o) => !o)}
       />
       {s.saveError && <div className="banner" role="alert">{s.saveError}</div>}
+      {s.notice && (
+        <div className="banner" role="alert">
+          {s.notice}{' '}
+          <button type="button" className="link" aria-label="Dismiss" onClick={s.dismissNotice}>✕</button>
+        </div>
+      )}
       <div className="layout">
         <PieceList
           open={sidebarOpen}

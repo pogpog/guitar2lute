@@ -5,6 +5,8 @@ export interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+  readonly length: number;
+  key(index: number): string | null;
 }
 
 export interface PieceMeta { id: string; title: string; updatedAt: string; }
@@ -20,6 +22,12 @@ export class MemoryStorage implements StorageLike {
   removeItem(key: string): void {
     this.map.delete(key);
   }
+  get length(): number {
+    return this.map.size;
+  }
+  key(index: number): string | null {
+    return [...this.map.keys()][index] ?? null;
+  }
 }
 
 export function browserStorage(): StorageLike {
@@ -33,7 +41,8 @@ export function browserStorage(): StorageLike {
 }
 
 const INDEX_KEY = 'g2l:index';
-const pieceKey = (id: string) => `g2l:piece:${id}`;
+const PIECE_PREFIX = 'g2l:piece:';
+const pieceKey = (id: string) => `${PIECE_PREFIX}${id}`;
 
 function newerVersionError(v: number): Error {
   return new Error(`This file was made by a newer version of the app (schema ${v}).`);
@@ -93,10 +102,46 @@ export function migrate(raw: unknown): Piece {
 export class PieceStore {
   constructor(private readonly storage: StorageLike) {}
 
+  /**
+   * Most recent first. Index entries are coerced to strings and de-duplicated, and pieces whose
+   * keys exist but are missing from the index (corrupt index, interrupted save) are added back.
+   */
   list(): PieceMeta[] {
+    const out: PieceMeta[] = [];
+    const seen = new Set<string>();
+    const str = (v: unknown) => (typeof v === 'string' ? v : '');
+    for (const m of this.readIndex()) {
+      if (!m || typeof m !== 'object' || typeof (m as PieceMeta).id !== 'string' || seen.has((m as PieceMeta).id)) continue;
+      const e = m as Record<string, unknown>;
+      seen.add(e.id as string);
+      out.push({ id: e.id as string, title: str(e.title), updatedAt: str(e.updatedAt) });
+    }
+    const lost: PieceMeta[] = [];
+    for (let i = 0; i < this.storage.length; i++) {
+      const k = this.storage.key(i);
+      if (!k || !k.startsWith(PIECE_PREFIX)) continue;
+      const id = k.slice(PIECE_PREFIX.length);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      let title = '';
+      let updatedAt = '';
+      try {
+        const d = JSON.parse(this.storage.getItem(k) ?? '') as Record<string, unknown>;
+        title = str(d?.title);
+        updatedAt = str(d?.updatedAt);
+      } catch {
+        /* listed anyway, so the user sees it and gets the error when opening it */
+      }
+      lost.push({ id, title, updatedAt });
+    }
+    lost.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
+    return [...out, ...lost];
+  }
+
+  private readIndex(): unknown[] {
     try {
       const v: unknown = JSON.parse(this.storage.getItem(INDEX_KEY) ?? '[]');
-      return Array.isArray(v) ? v.filter((m): m is PieceMeta => !!m && typeof (m as PieceMeta).id === 'string') : [];
+      return Array.isArray(v) ? v : [];
     } catch {
       return [];
     }

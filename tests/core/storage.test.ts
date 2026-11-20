@@ -130,9 +130,28 @@ describe('JSON import/export', () => {
     // a piece that is new here keeps its id; the same piece twice in one file is not doubled
     expect(saved[1]).toEqual(fresh);
     expect(saved).toHaveLength(2);
-    // importing an identical copy changes nothing
-    expect(store.addImported([mine])).toEqual([mine]);
+    // a piece that already exists is skipped unless the user asks to import it again
+    expect(store.addImported([mine])).toEqual([]);
     expect(store.list()).toHaveLength(3);
+  });
+  it('recognises a piece that was imported before, and imports it again only on request', () => {
+    const store = new PieceStore(new MemoryStorage());
+    const mine = newPiece('Greensleeves');
+    const backup = JSON.parse(JSON.stringify(mine)) as typeof mine;
+    mine.guitar.capo = 2;
+    store.save(mine);
+    const fresh = newPiece('Other');
+    expect(store.duplicatesOf([backup, fresh])).toEqual([]);
+    store.addImported([backup]); // first import: arrives as "Greensleeves (imported)"
+    // the copy has a new id and title, but the same contents: the backup already exists
+    expect(store.duplicatesOf([backup, fresh])).toEqual([backup]);
+    expect(store.duplicatesOf([mine])).toEqual([mine]); // same id, same contents
+    expect(store.addImported([backup, fresh])).toEqual([fresh]);
+    expect(store.list()).toHaveLength(3);
+    const again = store.addImported([backup], { again: true });
+    expect(again).toHaveLength(1);
+    expect(again[0].title).toBe('Greensleeves (imported)');
+    expect(store.list()).toHaveLength(4);
   });
   it('never overwrites a saved piece it cannot read', () => {
     const s = new MemoryStorage();

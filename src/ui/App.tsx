@@ -7,7 +7,7 @@ import { preferFlats } from '../core/pitch';
 import { toTabCode } from '../core/tabcode';
 import { setTitle } from '../core/edit';
 import { Player, stepsFromColumns } from '../audio/pluck';
-import { usePieces } from './state';
+import { importAgainMessage, usePieces } from './state';
 import { Header, type ExportKind, type View } from './Header';
 import { PieceList } from './PieceList';
 import { GuitarView } from './GuitarView';
@@ -90,7 +90,7 @@ export function App({ storage }: { storage?: StorageLike }) {
 
   const onImportJson = async (file: File) => {
     try {
-      s.importMany(importPieces(await file.text()));
+      s.importMany(importPieces(await file.text()), (dups) => window.confirm(importAgainMessage(dups)));
     } catch (e) {
       window.alert(`Could not import: ${(e as Error).message}`);
     }

@@ -43,6 +43,8 @@ export function browserStorage(): StorageLike {
 
 const INDEX_KEY = 'g2l:index';
 const PIECE_PREFIX = 'g2l:piece:';
+/** A piece's contents without what an imported copy changes: its id, and the "(imported)" added to its title. */
+const contentKey = (p: Piece) => JSON.stringify({ ...p, id: '', title: p.title.replace(/(?: \(imported\))+$/, '') });
 const pieceKey = (id: string) => `${PIECE_PREFIX}${id}`;
 
 function newerVersionError(v: number): Error {
@@ -169,25 +171,50 @@ export class PieceStore {
     return this.storage.getItem(pieceKey(id)) !== null;
   }
 
+  /** Content keys of every readable saved piece (see `contentKey`). */
+  private savedContent(): Set<string> {
+    const keys = new Set<string>();
+    for (const m of this.list()) {
+      try {
+        keys.add(contentKey(JSON.parse(this.storage.getItem(pieceKey(m.id)) ?? '') as Piece));
+      } catch {
+        /* unreadable pieces can't match anything */
+      }
+    }
+    return keys;
+  }
+
+  /** The incoming pieces that already exist here: same contents and title under any id, including an earlier "(imported)" copy. */
+  duplicatesOf(pieces: Piece[]): Piece[] {
+    const saved = this.savedContent();
+    const seen = new Set<string>();
+    return pieces.filter((p) => {
+      const k = contentKey(p);
+      if (seen.has(k) || !saved.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
+
   /**
-   * Saves imported pieces without ever overwriting a different saved piece (an edited original, or one
-   * this version cannot read): such a piece arrives as a copy with a new id and "(imported)" in its title.
-   * An identical copy changes nothing, and repeats within one import are skipped.
+   * Saves imported pieces without ever overwriting a saved piece: a piece whose id is already taken (by an
+   * edited original, or by one this version cannot read) arrives as a copy with a new id and "(imported)" in
+   * its title. A piece that already exists (see `duplicatesOf`) is skipped unless `again` is set, in which
+   * case it is imported as another copy. Repeats within one import are skipped.
    * Returns the pieces as saved, in import order.
    */
-  addImported(pieces: Piece[]): Piece[] {
+  addImported(pieces: Piece[], { again = false }: { again?: boolean } = {}): Piece[] {
     const out: Piece[] = [];
+    const saved = this.savedContent();
     const seen = new Set<string>();
+    const asCopy = (p: Piece): Piece => ({ ...p, id: newId(), title: `${p.title || 'Untitled'} (imported)` });
     for (const p of pieces) {
-      const text = JSON.stringify(p);
-      if (seen.has(text)) continue;
-      seen.add(text);
-      const stored = this.storage.getItem(pieceKey(p.id));
-      if (stored === text) {
-        out.push(p);
-        continue;
-      }
-      const q = stored === null ? p : { ...p, id: newId(), title: `${p.title || 'Untitled'} (imported)` };
+      const k = contentKey(p);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const exists = saved.has(k);
+      if (exists && !again) continue;
+      const q = exists || this.has(p.id) ? asCopy(p) : p;
       this.save(q);
       out.push(q);
     }

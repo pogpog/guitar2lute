@@ -17,6 +17,15 @@ export function safeLoad(store: PieceStore, id: string): Piece | null {
   }
 }
 
+/** The question asked before importing pieces that already exist. */
+export function importAgainMessage(dups: Piece[]): string {
+  const names = dups.map((p) => `“${p.title.trim() || 'Untitled'}”`);
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return names.length === 1
+    ? `${list} already exists. Do you want to import it again?`
+    : `${list} already exist. Do you want to import them again?`;
+}
+
 /** Autosave skips an untouched new piece, but keeps saving one that is already stored (so clearing it sticks). */
 export function shouldSave(store: PieceStore, p: Piece): boolean {
   return !isBlankPiece(p) || store.has(p.id);
@@ -113,11 +122,14 @@ export function usePieces(storage: StorageLike) {
   );
 
   const importMany = useCallback(
-    (pieces: Piece[]) => {
+    /** `askAgain` is asked (with the pieces that already exist) whether to import those again. */
+    (pieces: Piece[], askAgain: (dups: Piece[]) => boolean) => {
       trySave(piece);
+      const dups = store.duplicatesOf(pieces);
+      const again = dups.length > 0 && askAgain(dups);
       let saved: Piece[] = [];
       try {
-        saved = store.addImported(pieces);
+        saved = store.addImported(pieces, { again });
       } catch {
         setSaveError(SAVE_ERROR);
       }

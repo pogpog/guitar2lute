@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { initialPiece, safeLoad, shouldSave } from '../../src/ui/state';
+import { importAgainMessage, initialPiece, safeLoad, shouldSave } from '../../src/ui/state';
 import { MemoryStorage, PieceStore } from '../../src/core/storage';
 import { newPiece } from '../../src/core/piece';
 import { combineSvgs, parseIntInRange, slug } from '../../src/ui/util';
@@ -62,5 +62,13 @@ describe('shouldSave', () => {
     store.save(cleared);
     cleared.title = 'Untitled'; // emptied after it was saved: the change must still be saved
     expect(shouldSave(store, cleared)).toBe(true);
+  });
+});
+
+describe('importAgainMessage', () => {
+  it('names the pieces that already exist', () => {
+    expect(importAgainMessage([newPiece('Greensleeves')])).toBe('“Greensleeves” already exists. Do you want to import it again?');
+    expect(importAgainMessage([newPiece('A'), newPiece('')])).toBe('“A” and “Untitled” already exist. Do you want to import them again?');
+    expect(importAgainMessage([newPiece('A'), newPiece('B'), newPiece('C')])).toBe('“A”, “B” and “C” already exist. Do you want to import them again?');
   });
 });

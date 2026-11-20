@@ -154,3 +154,24 @@ test('importing an old backup never overwrites the edited piece', async ({ page 
   await expect(page.locator('.piece-open', { hasText: 'Greensleeves edited' })).toHaveCount(1);
   await expect(page.locator('.piece-open', { hasText: 'Greensleeves (imported)' })).toHaveCount(1);
 });
+
+test('asks before importing a piece that already exists', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Piece title').fill('Greensleeves');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export').selectOption('json')]);
+  const backup = await (await dl.createReadStream()).toArray().then((c) => Buffer.concat(c));
+  const file = page.locator('input[type="file"][accept*="json"]');
+  const importBackup = () => file.setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: backup });
+  const asked: string[] = [];
+  page.once('dialog', (d) => {
+    asked.push(d.message());
+    void d.dismiss();
+  });
+  await importBackup();
+  await expect.poll(() => asked).toEqual(['“Greensleeves” already exists. Do you want to import it again?']);
+  await expect(page.locator('.piece-open')).toHaveCount(1);
+  page.once('dialog', (d) => void d.accept());
+  await file.setInputFiles([]);
+  await importBackup();
+  await expect(page.locator('.piece-open', { hasText: 'Greensleeves (imported)' })).toHaveCount(1);
+});

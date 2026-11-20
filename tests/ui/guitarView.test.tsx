@@ -3,8 +3,9 @@ import { html, noop } from './render';
 import { ImportDialog } from '../../src/ui/ImportDialog';
 import { GuitarView } from '../../src/ui/GuitarView';
 import { newPiece } from '../../src/core/piece';
-import { addChord } from '../../src/core/edit';
-import { AM_ARPEGGIO } from '../core/parse/fixtures';
+import { addChord, applyImport } from '../../src/core/edit';
+import { importTabText } from '../../src/core/parse/importText';
+import { AM_ARPEGGIO, WITH_LYRICS_AND_COUNTS } from '../core/parse/fixtures';
 
 describe('ImportDialog', () => {
   it('disables import when nothing parses', () => {
@@ -21,6 +22,15 @@ describe('ImportDialog', () => {
 });
 
 describe('GuitarView', () => {
+  it('still shows the last import warnings when the view is opened again', () => {
+    const imp = importTabText(WITH_LYRICS_AND_COUNTS);
+    expect(imp.warnings.length).toBeGreaterThan(0);
+    const p = applyImport(newPiece(), imp, WITH_LYRICS_AND_COUNTS);
+    // a fresh render is what the user gets after switching views or reloading
+    const out = html(<GuitarView piece={p} update={noop} flats={false} onPlayChord={noop} />);
+    expect(out).toContain('data-testid="warnings"');
+    for (const w of imp.warnings) expect(out).toContain(w.message.replace(/&/g, '&amp;').replace(/"/g, '&quot;'));
+  });
   it('shows tuning, capo, chord boxes and tab section', () => {
     const p = addChord(newPiece());
     const out = html(<GuitarView piece={p} update={noop} flats={false} onPlayChord={noop} />);

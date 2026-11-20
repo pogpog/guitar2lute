@@ -188,7 +188,7 @@ Piece-level selector for guitar input tuning (presets + custom) and capo (0–12
    - `x` (dead note): skipped.
    - `~`, `PM`, `let ring`, `t`: ignored.
 8. **Skipped content:** lyrics, chord-name lines, rhythm/count lines (`|---1---|` style lines outside a 6-line block), trailing `x4`/`repeat` annotations. Each block end becomes a `break` event.
-9. **Warnings** carry source line numbers; the warnings panel links back to the paste box with that line selected.
+9. **Warnings** carry source line numbers; the warnings panel links back to the paste box with that line selected. The last import's warnings stay listed in the guitar view (they are recomputed from the stored source text) until the next import, including after switching views or reloading.
 
 ### 5.4 PDF import (`import/pdf.ts`)
 - `pdfjs-dist` is lazy-loaded on first use; the worker is imported via `?url`.

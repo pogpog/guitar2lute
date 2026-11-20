@@ -175,3 +175,21 @@ test('asks before importing a piece that already exists', async ({ page }) => {
   await importBackup();
   await expect(page.locator('.piece-open', { hasText: 'Greensleeves (imported)' })).toHaveCount(1);
 });
+
+test('keeps import warnings after switching views and reloading', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('open-import').click();
+  const withCountLine = ['Am        G', '|---1---2---|', 'e|---0---3---|', 'B|---1---0---|', 'G|---2---0---|', 'D|---2---0---|', 'A|---0---2---|', 'E|-------3---|', 'la la la'];
+  await page.getByTestId('import-text').fill(withCountLine.join('\n'));
+  await page.getByTestId('do-import').click();
+  const items = page.getByTestId('warnings').locator('li');
+  await expect(items).toHaveCount(1);
+  const text = await items.allTextContents();
+  expect(text[0]).toContain('Ignored line(s) 2');
+  await page.getByTestId('view-lute').click();
+  await page.getByTestId('view-guitar').click();
+  await expect(items).toHaveText(text);
+  await page.waitForTimeout(800); // autosave debounce
+  await page.reload();
+  await expect(items).toHaveText(text);
+});

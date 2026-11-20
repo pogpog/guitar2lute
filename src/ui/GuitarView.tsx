@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import type { Midi, Piece, Warning } from '../core/model';
+import { useMemo, useState } from 'react';
+import type { Midi, Piece } from '../core/model';
+import { importTabText } from '../core/parse/importText';
 import { GUITAR_PRESETS, findPreset } from '../core/tunings';
 import { chordPitches } from '../core/piece';
 import { addChord, applyImport, moveChord, removeChord, setCapo, setGuitarTuning, updateChord } from '../core/edit';
@@ -20,7 +21,10 @@ export interface GuitarViewProps {
 
 export function GuitarView({ piece, update, flats, playing = null, onPlayChord }: GuitarViewProps) {
   const [importing, setImporting] = useState(false);
-  const [warnings, setWarnings] = useState<Warning[]>([]);
+  // Recomputed from the stored source text (parsing is deterministic), so the last import's
+  // warnings survive switching views and reloading.
+  const source = piece.guitar.sourceText;
+  const warnings = useMemo(() => (source ? importTabText(source).warnings : []), [source]);
   const g = piece.guitar;
   const isPreset = GUITAR_PRESETS.some((t) => t.id === g.tuning.id);
   return (
@@ -77,7 +81,6 @@ export function GuitarView({ piece, update, flats, playing = null, onPlayChord }
           onClose={() => setImporting(false)}
           onImport={(imp, text) => {
             update((p) => applyImport(p, imp, text));
-            setWarnings(imp.warnings);
             setImporting(false);
           }}
         />

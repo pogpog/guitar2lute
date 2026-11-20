@@ -96,6 +96,7 @@ describe('migrate', () => {
       ['lute.maxFret', (p) => { p.lute.maxFret = 20; }],
       ['lute.maxFret', (p) => { p.lute.maxFret = 3; }],
       ['lute.maxStretch', (p) => { p.lute.maxStretch = 7; }],
+      ['guitar.sourceText', (p) => { p.guitar.sourceText = 42; }],
     ];
     expect(() => migrate(ok())).not.toThrow();
     for (const [field, breakIt] of broken) {

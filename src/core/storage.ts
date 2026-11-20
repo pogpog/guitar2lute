@@ -82,6 +82,7 @@ function invalidField(r: Obj): string | null {
   if (!inRange(g.capo, 0, 12)) return 'guitar.capo';
   if (!Array.isArray(g.chords) || !g.chords.every(isChord)) return 'guitar.chords';
   if (!Array.isArray(g.tab) || !g.tab.every(isEvent)) return 'guitar.tab';
+  if (g.sourceText !== undefined && typeof g.sourceText !== 'string') return 'guitar.sourceText';
   const l = r.lute;
   if (!isObj(l)) return 'lute';
   if (!isTuning(l.tuning)) return 'lute.tuning';

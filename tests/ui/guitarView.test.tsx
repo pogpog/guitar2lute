@@ -64,3 +64,13 @@ describe('GuitarView tuning', () => {
     expect(out).toContain('data-testid="edit-guitar-tuning"');
   });
 });
+
+describe('GuitarView tuning line', () => {
+  it('spells out each string of the guitar tuning', () => {
+    const p = newPiece();
+    p.guitar.tuning = findPreset('guitar-drop-d')!;
+    const out = html(<GuitarView piece={p} update={noop} flats={false} onPlayChord={noop} />);
+    const line = (/data-testid="guitar-tuning-line"[^>]*>(.*?)<\/p>/s.exec(out)?.[1] ?? '').replace(/<[^>]+>/g, '');
+    expect(line).toBe('Guitar tuning: 1 E4 · 2 B3 · 3 G3 · 4 D3 · 5 A2 · 6 D2');
+  });
+});

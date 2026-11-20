@@ -10,6 +10,7 @@ import { ImportDialog } from './ImportDialog';
 import { WarningsPanel } from './WarningsPanel';
 import { IntField } from './IntField';
 import { GuitarTuningEditor } from './GuitarTuningEditor';
+import { TuningLine } from './TuningLine';
 
 export interface GuitarViewProps {
   piece: Piece;
@@ -51,6 +52,7 @@ export function GuitarView({ piece, update, flats, playing = null, onPlayChord }
           <IntField min={0} max={12} value={g.capo} onCommit={(n) => update((p) => setCapo(p, n))} />
         </label>
       </div>
+      <TuningLine label="Guitar tuning" tuning={g.tuning} testId="guitar-tuning-line" />
       {editingTuning && (
         <GuitarTuningEditor
           tuning={g.tuning}

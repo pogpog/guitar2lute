@@ -5,6 +5,7 @@ import { autoTransposeAsync } from '../core/convert/autoTranspose';
 import { clearOverrides, pinChord, pinTabColumn, removePinsFor, removeStalePins, setChordVoicing, setLuteSettings } from '../core/edit';
 import { LuteSettingsBar } from './LuteSettingsBar';
 import { TuningEditor } from './TuningEditor';
+import { TuningLine } from './TuningLine';
 import { LuteChordBox } from './LuteChordBox';
 import { LuteTabView } from './LuteTabView';
 import { WarningsPanel } from './WarningsPanel';
@@ -67,6 +68,7 @@ export function LuteView({ piece, update, result, playing, onPlayChord }: LuteVi
         autoBusy={autoBusy}
         onClearOverrides={() => update(clearOverrides)}
       />
+      <TuningLine label="Lute tuning" tuning={s.tuning} testId="lute-tuning-line" />
       {editing && <TuningEditor tuning={s.tuning} onChange={(t) => update((p) => setLuteSettings(p, { tuning: t }))} onClose={() => setEditing(false)} />}
 
       <h2>Lute chord boxes</h2>

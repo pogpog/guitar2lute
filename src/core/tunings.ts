@@ -1,5 +1,5 @@
 import type { Midi, Tuning } from './model';
-import { nameToMidi, pitchClass, midiToName } from './pitch';
+import { nameToMidi, pitchClass, midiToName, preferFlats, prettyName } from './pitch';
 
 function mk(id: string, name: string, notes: string[], fretted = notes.length): Tuning {
   return {
@@ -133,4 +133,22 @@ export function setCoursePitch(t: Tuning, course: number, midi: Midi): Tuning {
 
 export function setFrettedCourses(t: Tuning, n: number): Tuning {
   return custom(t, { frettedCourses: Math.max(1, Math.min(t.courses.length, n)) });
+}
+
+export interface CourseLabel {
+  /** 1-based, 1 = highest */
+  course: number;
+  /** pitch with octave, e.g. "G4", "E♭2" */
+  name: string;
+  /** open-only bass course */
+  diapason: boolean;
+}
+
+export function courseLabels(t: Tuning): CourseLabel[] {
+  const flats = preferFlats(t.courses);
+  return t.courses.map((m, i) => ({
+    course: i + 1,
+    name: prettyName(midiToName(m, flats)),
+    diapason: i >= t.frettedCourses,
+  }));
 }

@@ -66,6 +66,8 @@ input[type='number'] { width: 4.5em; }
 .view h2 { font-size: 1.05rem; margin: 20px 0 8px; display: flex; align-items: center; gap: 12px; }
 .settings-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
 .settings-bar label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.tuning-line { margin: 6px 2px 0; display: flex; flex-wrap: wrap; gap: 2px 8px; }
+.tuning-line-label { color: var(--muted); }
 .hint { font-size: 0.85rem; margin: 0 0 6px; }
 
 .chord-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   LUTE_PRESETS, GUITAR_PRESETS, findPreset, guitarTuningByName, inferGuitarTuning,
-  addBassCourse, removeBassCourse, setCoursePitch, setFrettedCourses, setGuitarStringPitch,
+  addBassCourse, removeBassCourse, setCoursePitch, setFrettedCourses, setGuitarStringPitch, courseLabels,
 } from '../../src/core/tunings';
 
 describe('tuning presets', () => {
@@ -80,5 +80,23 @@ describe('guitar string edits', () => {
     expect(dropD.id).toBe('guitar-drop-d');
     expect(dropD.name).toBe('Drop D');
     expect(setGuitarStringPitch(dropD, 5, 40).id).toBe('guitar-standard');
+  });
+});
+
+describe('courseLabels', () => {
+  it('numbers each course from the top with its pitch and octave', () => {
+    expect(courseLabels(findPreset('lute-6-g')!).map((c) => `${c.course} ${c.name}`)).toEqual(
+      ['1 G4', '2 D4', '3 A3', '4 F3', '5 C3', '6 G2'],
+    );
+  });
+  it('marks open bass courses as diapasons', () => {
+    const labels = courseLabels(findPreset('lute-8-g')!);
+    expect(labels.filter((c) => c.diapason).map((c) => `${c.course} ${c.name}`)).toEqual(['8 D2']);
+    expect(labels[6]).toEqual({ course: 7, name: 'F2', diapason: false });
+  });
+  it('spells accidentals to suit the tuning', () => {
+    expect(courseLabels(findPreset('lute-10-g')!)[7].name).toBe('E♭2');
+    expect(courseLabels(findPreset('guitar-half-down')!).map((c) => c.name)).toEqual(['E♭4', 'B♭3', 'G♭3', 'D♭3', 'A♭2', 'E♭2']);
+    expect(courseLabels(findPreset('guitar-open-d')!)[2].name).toBe('F♯3');
   });
 });

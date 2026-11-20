@@ -8,6 +8,11 @@ import { convertPiece } from '../../src/core/convert/convert';
 import { addBassCourse, findPreset } from '../../src/core/tunings';
 
 describe('LuteSettingsBar', () => {
+  it('shows that Auto is working and blocks a second click', () => {
+    const out = html(<LuteSettingsBar settings={newPiece().lute} hasOverrides={false} autoBusy onChange={noop} onEditTuning={noop} onAuto={noop} onClearOverrides={noop} />);
+    expect(out).toMatch(/data-testid="auto-transpose"[^>]*disabled=""/);
+    expect(out).toContain('Working…');
+  });
   it('shows presets, transpose shortcuts and notation choices', () => {
     const out = html(<LuteSettingsBar settings={newPiece().lute} hasOverrides={false} onChange={noop} onEditTuning={noop} onAuto={noop} onClearOverrides={noop} />);
     expect(out).toContain('Renaissance 6-course in G');

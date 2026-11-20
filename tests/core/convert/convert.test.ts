@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { convertPiece, cycleNote, limitsOf, nextPlacement, placementCycle } from '../../../src/core/convert/convert';
-import { autoTranspose } from '../../../src/core/convert/autoTranspose';
+import { autoTranspose, autoTransposeAsync } from '../../../src/core/convert/autoTranspose';
 import { newPiece, columnPitches } from '../../../src/core/piece';
 import { parseAsciiTab } from '../../../src/core/parse/asciiTab';
 import { findPreset } from '../../../src/core/tunings';
@@ -246,5 +246,13 @@ describe('autoTranspose', () => {
   });
   it('chooses 0 for an empty piece', () => {
     expect(autoTranspose(newPiece())).toBe(0);
+  });
+  it('can run in steps that give the page a chance to repaint', async () => {
+    let pauses = 0;
+    const t = await autoTransposeAsync(piece([E]), async () => {
+      pauses++;
+    });
+    expect(t).toBe(3);
+    expect(pauses).toBe(13); // once per candidate transpose
   });
 });

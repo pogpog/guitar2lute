@@ -8,10 +8,12 @@ export interface LuteSettingsBarProps {
   onChange: (patch: Partial<LuteSettings>) => void;
   onEditTuning: () => void;
   onAuto: () => void;
+  /** Auto is still working out the best transpose */
+  autoBusy?: boolean;
   onClearOverrides: () => void;
 }
 
-export function LuteSettingsBar({ settings, hasOverrides, onChange, onEditTuning, onAuto, onClearOverrides }: LuteSettingsBarProps) {
+export function LuteSettingsBar({ settings, hasOverrides, onChange, onEditTuning, onAuto, autoBusy = false, onClearOverrides }: LuteSettingsBarProps) {
   const isPreset = LUTE_PRESETS.some((t) => t.id === settings.tuning.id);
   return (
     <div className="settings-bar" data-testid="lute-settings">
@@ -35,7 +37,9 @@ export function LuteSettingsBar({ settings, hasOverrides, onChange, onEditTuning
         <IntField data-testid="transpose" min={-12} max={12} value={settings.transpose} onCommit={(n) => onChange({ transpose: n })} />
       </label>
       <button type="button" title="Keeps guitar shapes on a lute in G" onClick={() => onChange({ transpose: 3 })}>+3 guitar shapes</button>
-      <button type="button" data-testid="auto-transpose" title="Pick the transpose that plays best" onClick={onAuto}>Auto</button>
+      <button type="button" data-testid="auto-transpose" title="Pick the transpose that plays best" disabled={autoBusy} aria-busy={autoBusy} onClick={onAuto}>
+        {autoBusy ? 'Working…' : 'Auto'}
+      </button>
       <label>
         Max fret
         <IntField data-testid="max-fret" min={4} max={12} value={settings.maxFret} onCommit={(n) => onChange({ maxFret: n })} />

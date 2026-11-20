@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LuteColumn, LuteResult, Midi, Piece } from '../core/model';
 import { cycleNote, limitsOf } from '../core/convert/convert';
-import { autoTranspose } from '../core/convert/autoTranspose';
+import { autoTransposeAsync } from '../core/convert/autoTranspose';
 import { clearOverrides, pinChord, pinTabColumn, setChordVoicing, setLuteSettings } from '../core/edit';
 import { LuteSettingsBar } from './LuteSettingsBar';
 import { TuningEditor } from './TuningEditor';
@@ -19,6 +19,7 @@ export interface LuteViewProps {
 
 export function LuteView({ piece, update, result, playing, onPlayChord }: LuteViewProps) {
   const [editing, setEditing] = useState(false);
+  const [autoBusy, setAutoBusy] = useState(false);
   const [width, setWidth] = useState(900);
   const wrapRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -45,6 +46,16 @@ export function LuteView({ piece, update, result, playing, onPlayChord }: LuteVi
     if (pins) update((p) => pinChord(p, chordIndex, pins));
   };
 
+  const runAuto = async () => {
+    setAutoBusy(true);
+    try {
+      const t = await autoTransposeAsync(piece);
+      update((p) => setLuteSettings(p, { transpose: t }));
+    } finally {
+      setAutoBusy(false);
+    }
+  };
+
   return (
     <section className="view lute-view">
       <LuteSettingsBar
@@ -52,7 +63,8 @@ export function LuteView({ piece, update, result, playing, onPlayChord }: LuteVi
         hasOverrides={hasOverrides}
         onChange={(patch) => update((p) => setLuteSettings(p, patch))}
         onEditTuning={() => setEditing((e) => !e)}
-        onAuto={() => update((p) => setLuteSettings(p, { transpose: autoTranspose(p) }))}
+        onAuto={runAuto}
+        autoBusy={autoBusy}
         onClearOverrides={() => update(clearOverrides)}
       />
       {editing && <TuningEditor tuning={s.tuning} onChange={(t) => update((p) => setLuteSettings(p, { tuning: t }))} onClose={() => setEditing(false)} />}

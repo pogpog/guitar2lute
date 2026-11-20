@@ -21,7 +21,8 @@
 - French fret letters: a b c d e f g h i k l m n (no `j`). Italian: 0–9, `X` for 10.
 - Playability: fret span ≤ `maxStretch`; at most 4 stopping fingers (a barré counts as one); courses ≥ `frettedCourses` are open-only.
 - Tab DP keeps the top K = 8 candidates per column; chord boxes return up to 3 voicings.
-- Candidate enumeration visits at most 5000 assignments per column (`ENUMERATION_CAP`). This replaces the spec's "200 candidates" cap with a bound on work done; ranking still keeps only the best K.
+- Candidate enumeration visits at most 5000 assignments per search (`ENUMERATION_CAP`) and prunes branches that cannot beat the current K-th best (branch-and-bound). This replaces the spec's "200 candidates" cap with a bound on work done; ranking still keeps only the best K.
+- A column that does not fit as written may move notes by octaves and drop notes; the cheapest result wins. Drop penalties follow the musical role (duplicate 4 < octave doubling 7 < inner voice 10 < top 16 < bass 20 < pinned 30) against a shift penalty of 5, and an octave shift into unison with another note is never allowed.
 - Stored/exported JSON carries `schemaVersion: 1`.
 - Workbox `maximumFileSizeToCacheInBytes` = 5 MB.
 - No customer data, PII or other sensitive data in fixtures, tests or commits.
@@ -32,8 +33,8 @@
 1. **Tab lines with labels of different widths** (`e |`, `D#|`, `e  |`): columns must still align → test in Task 6 (`aligns columns when label widths differ`).
 2. **Empty input** (new piece, no chords, no tab; chord box with every string muted/unset): conversion and every view must render without throwing → tests in Task 11 (`empty piece`, `all-muted chord`) and Task 21 (`renders empty states`).
 3. **Changing lute tuning after pinning notes**: stale pins must become warnings, never crashes → test in Task 11 (`stale pin after tuning change`).
-4. **Corrupted localStorage** (bad index JSON, bad piece JSON, piece from a newer schema): app must still start → tests in Task 14 (`corrupt index`, `corrupt piece`) and `initialPiece`/`safeLoad` in Task 18 (`skips corrupt pieces`).
-5. **Long tabs** (≈1000 columns pasted from a full song): conversion must stay interactive → test in Task 11 (`converts 1000 columns quickly`).
+4. **Corrupted localStorage** (bad index JSON, bad piece JSON, valid JSON with the wrong shape, piece from a newer schema): app must still start → tests in Task 14 (`corrupt index`, `corrupt piece`, `rejects data that parses but has the wrong shape`), Task 18 (`skips corrupt pieces`, `skips a stored piece that is valid JSON but the wrong shape`) and the `ErrorBoundary` recovery screen in Task 23.
+5. **Long tabs** (≈1000 columns pasted from a full song): conversion and Auto transpose must stay interactive → test in Task 11 (`converts 1000 columns quickly`, which also times `autoTranspose`).
 
 ---
 
@@ -57,11 +58,11 @@ src/core/parse/importText.ts      headers + parser + label tuning → TextImport
 src/core/asciiRender.ts           TabEvent[] → ASCII lines (guitar tab view)
 src/core/convert/types.ts         Limits, SolvedNote, ColumnCandidate
 src/core/convert/playability.ts   span, fingers, barré
-src/core/convert/candidates.ts    placements, pins, assignment enumeration
+src/core/convert/candidates.ts    placements, pins, octave options, assignment enumeration (branch-and-bound)
 src/core/convert/cost.ts          WEIGHTS, placement + transition cost
-src/core/convert/column.ts        solveColumn (shift / drop / rank)
+src/core/convert/column.ts        solveColumn (role-based drop penalties, shift/drop search, alternatives)
 src/core/convert/viterbi.ts       DP over columns
-src/core/convert/convert.ts       convertPiece, limitsOf, placementCycle, nextPlacement
+src/core/convert/convert.ts       convertPiece, limitsOf, placementCycle, nextPlacement, cycleNote
 src/core/convert/autoTranspose.ts autoTranspose
 src/core/edit.ts                  pure Piece edit helpers
 src/core/tabcode.ts               LuteResult → TabCode
@@ -86,7 +87,7 @@ e2e/**                            Playwright tests
 - Test: `tests/ui/App.test.tsx`
 
 **Interfaces:**
-- Produces: `npm test`, `npm run typecheck`, `npm run build`, `npm run dev`; `App` component exported from `src/ui/App.tsx` (rewritten in Task 22).
+- Produces: `npm test`, `npm run typecheck`, `npm run build`, `npm run dev`; `App` component exported from `src/ui/App.tsx` (rewritten in Task 23).
 
 - [ ] **Step 1: Create `package.json`**
 
@@ -235,7 +236,7 @@ Expected: FAIL — cannot resolve `../../src/ui/App`.
 
 - [ ] **Step 8: Create `src/ui/App.tsx`, `src/main.tsx`, `src/styles.css`**
 
-`src/ui/App.tsx` (temporary; fully rewritten in Task 22):
+`src/ui/App.tsx` (temporary; fully rewritten in Task 23):
 ```tsx
 export function App() {
   return <h1>Guitar → Lute</h1>;
@@ -259,7 +260,7 @@ createRoot(document.getElementById('root')!).render(
 );
 ```
 
-`src/styles.css` (replaced in Task 22):
+`src/styles.css` (replaced in Task 23):
 ```css
 body { margin: 0; font-family: system-ui, sans-serif; }
 ```
@@ -1188,7 +1189,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: `normalizeTabText` (Task 5), `parseHeaders` (Task 5), `inferGuitarTuning` (Task 3), `parsePitchClass` (Task 2).
 - Produces: `AsciiParseResult = { events: TabEvent[]; warnings: Warning[]; labels: number[] | null }`, `parseAsciiTab(raw: string): AsciiParseResult`; `TextImport = { events: TabEvent[]; warnings: Warning[]; tuning: Tuning | null; capo: number | null }`, `importTabText(text: string): TextImport`.
-- Behaviour: each 6-line block ends with a `{kind:'break'}`; `x` accumulates across blocks (`xOffset += blockWidth + 4`); notes in a column are sorted by string; `src.line`/`src.col` and warning `line` are 1-based.
+- Behaviour: each 6-line block ends with a `{kind:'break'}`; `x` accumulates across blocks (`xOffset += blockWidth + 4`); notes in a column are sorted by string; `src.line`/`src.col` and warning `line` are 1-based. Labels may be followed by `|`, `-` or `:`; text after the last barline (`|  let ring`, `| PM`) is ignored. A run of tab-like lines that is not a multiple of 6 is split into the best-scoring 6-line windows (labels, equal lengths, shared barlines, no count lines) and one warning lists the skipped lines.
 
 - [ ] **Step 1: Create the fixtures `tests/core/parse/fixtures.ts`**
 
@@ -1252,6 +1253,24 @@ export const REPEATS = [
   'A|:-----:|',
   'E|:-----:|',
 ].join('\n');
+
+/** Real-world variations that must not lose blocks or shift strings. */
+export const TRAILING_TEXT = [
+  'e|-------0---|  let ring',
+  'B|-----1---1-| PM',
+  'G|---2-------|',
+  'D|-----------|',
+  'A|-0---------|  (x2)',
+  'E|-----------|',
+].join('\n');
+
+export const COLON_LABELS = AM_ARPEGGIO.replace(/^([eBGDAE])\|/gm, '$1:');
+
+export const TWO_BLOCKS_AND_COUNT = [AM_ARPEGGIO, AM_ARPEGGIO, '|-1---2---3---4|'].join('\n');
+
+export const COUNT_ABOVE_UNLABELLED = ['|---1-----2--|', ...AM_ARPEGGIO.split('\n').map((l) => l.slice(1))].join('\n');
+
+export const WITH_TAB_CHARACTERS = AM_ARPEGGIO.split('\n').map((l) => `\t${l}`).join('\r\n');
 ```
 
 - [ ] **Step 2: Write the failing test `tests/core/parse/asciiTab.test.ts`**
@@ -1336,6 +1355,30 @@ describe('parseAsciiTab', () => {
   });
 });
 
+describe('parseAsciiTab — real-world variations', () => {
+  const am = cols(parseAsciiTab(F.AM_ARPEGGIO).events);
+  it('ignores text after the closing barline', () => {
+    expect(cols(parseAsciiTab(F.TRAILING_TEXT).events)).toEqual(am);
+  });
+  it('accepts labels followed by a colon', () => {
+    expect(cols(parseAsciiTab(F.COLON_LABELS).events)).toEqual(am);
+  });
+  it('keeps both blocks when a count line follows them', () => {
+    const r = parseAsciiTab(F.TWO_BLOCKS_AND_COUNT);
+    expect(cols(r.events)).toEqual([...am, ...am]);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0].line).toBe(13);
+  });
+  it('does not take a count line above an unlabelled block as string 1', () => {
+    const r = parseAsciiTab(F.COUNT_ABOVE_UNLABELLED);
+    expect(cols(r.events)).toEqual(am);
+    expect(r.warnings[0].line).toBe(1);
+  });
+  it('expands tab characters and CRLF line endings', () => {
+    expect(cols(parseAsciiTab(F.WITH_TAB_CHARACTERS).events)).toEqual(am);
+  });
+});
+
 describe('importTabText', () => {
   it('combines headers, parse and label tuning', () => {
     const r = importTabText(F.MESSY);
@@ -1370,7 +1413,7 @@ interface LineInfo { index: number; label: string | null; body: string; origin: 
 interface Token { string: number; start: number; end: number; fret: number; }
 
 const LABEL_RE = /^\s*([A-Ga-g][#b]?)\s*(?=[|:\-])/;
-const TAB_CHAR = /[-0-9|hpbr/\\~x()<>sn^.*]/;
+const TAB_CHAR = /[-0-9|:hpbr/\\~x()<>sn^.*]/;
 const TRAILING_ANNOTATION = /\s+(?:x\s*\d+|\d+\s*x|\(?repeat\b.*)$/i;
 
 function analyzeLine(text: string, index: number): LineInfo {
@@ -1380,11 +1423,16 @@ function analyzeLine(text: string, index: number): LineInfo {
   let origin = -1;
   for (let i = start; i < text.length; i++) {
     const c = text[i];
-    if (c === '|' || c === '-') { origin = i; break; }
+    if (c === '|' || c === '-' || c === ':') { origin = i; break; }
     if (c !== ' ') break;
   }
   if (origin < 0) return { index, label, body: '', origin: 0, isTab: false };
-  const body = text.slice(origin).replace(/\s+$/, '').replace(TRAILING_ANNOTATION, '');
+  let body = text.slice(origin).replace(/\s+$/, '');
+  // Text after the last barline ("|  let ring", "|PM", "| Am") is an annotation, not tab.
+  const lastBar = body.lastIndexOf('|');
+  const rest = lastBar > 0 ? body.slice(lastBar + 1) : '';
+  if (rest && (/^\s/.test(rest) || /[A-Za-z]{2,}/.test(rest))) body = body.slice(0, lastBar + 1);
+  body = body.replace(TRAILING_ANNOTATION, '');
   let tabChars = 0;
   let dashes = 0;
   for (const c of body) {
@@ -1395,18 +1443,48 @@ function analyzeLine(text: string, index: number): LineInfo {
   return { index, label, body, origin, isTab };
 }
 
-function blocksFromRun(run: LineInfo[]): LineInfo[][] {
-  if (run.length < 6) return [];
-  if (run.length % 6 === 0) {
-    const out: LineInfo[][] = [];
-    for (let s = 0; s < run.length; s += 6) out.push(run.slice(s, s + 6));
-    return out;
+/** Lines like "|--1--2--3--|" that only count beats. */
+function isCountLike(body: string): boolean {
+  const nums = (body.match(/\d+/g) ?? []).map(Number);
+  return nums.length > 0 && nums.every((n, k) => n === k + 1);
+}
+
+/** How much six lines look like one block: labels, equal lengths, shared barlines, no count lines. */
+function windowScore(w: LineInfo[]): number {
+  const mode = <T,>(xs: T[]) => {
+    const counts = new Map<T, number>();
+    for (const x of xs) counts.set(x, (counts.get(x) ?? 0) + 1);
+    return Math.max(...counts.values());
+  };
+  const bars = w.map((l) => [...l.body].flatMap((c, k) => (c === '|' ? [k] : [])).join(','));
+  return (
+    w.filter((l) => l.label).length +
+    mode(w.map((l) => l.body.length)) +
+    mode(bars) -
+    w.filter((l) => isCountLike(l.body)).length
+  );
+}
+
+/**
+ * Splits a run of tab-like lines into 6-line blocks. When the run has extra lines (count lines,
+ * annotations), each block is the best-scoring window at that point and the rest are skipped.
+ */
+function blocksFromRun(run: LineInfo[]): { blocks: LineInfo[][]; skipped: LineInfo[] } {
+  const blocks: LineInfo[][] = [];
+  const skipped: LineInfo[] = [];
+  let s = 0;
+  while (s + 6 <= run.length) {
+    const spare = (run.length - s) % 6;
+    let best = s;
+    for (let t = s + 1; t <= s + spare; t++) {
+      if (windowScore(run.slice(t, t + 6)) > windowScore(run.slice(best, best + 6))) best = t;
+    }
+    skipped.push(...run.slice(s, best));
+    blocks.push(run.slice(best, best + 6));
+    s = best + 6;
   }
-  for (let s = 0; s + 6 <= run.length; s++) {
-    const w = run.slice(s, s + 6);
-    if (w.every((l) => l.label)) return [w];
-  }
-  return [run.slice(0, 6)];
+  skipped.push(...run.slice(s));
+  return { blocks, skipped };
 }
 
 function parseBlock(block: LineInfo[], xOffset: number): { events: TabEvent[]; width: number; warnings: Warning[] } {
@@ -1508,15 +1586,19 @@ export function parseAsciiTab(raw: string): AsciiParseResult {
     let j = i;
     while (j < infos.length && infos[j].isTab) j++;
     const run = infos.slice(i, j);
-    const blocks = blocksFromRun(run);
+    const { blocks, skipped } = blocksFromRun(run);
     if (blocks.length === 0) {
       if (run.length >= 3) {
         warnings.push({ kind: 'parse', message: `Found ${run.length} tab-like lines (expected 6); skipped.`, line: run[0].index + 1 });
       }
     } else {
-      const used = blocks.length * 6;
-      if (run.length > used) {
-        warnings.push({ kind: 'parse', message: `Ignored ${run.length - used} extra tab-like line(s) next to this block.`, line: run[0].index + 1 });
+      if (skipped.length) {
+        const lines = skipped.map((l) => l.index + 1).join(', ');
+        warnings.push({
+          kind: 'parse',
+          message: `Ignored line(s) ${lines} next to the tab (count or annotation lines?). If notes ended up on the wrong strings, delete the extra lines and import again.`,
+          line: skipped[0].index + 1,
+        });
       }
       for (const block of blocks) {
         const parsed = parseBlock(block, xOffset);
@@ -1702,7 +1784,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: model types, `findPreset` (Task 3, tests).
 - Produces (types.ts): `Limits { tuning; maxFret; maxStretch }`, `NoteOption { placement; shifted; pinned }`, `SolvedNote { srcIndex; pitch; shifted; placement; pinned }`, `ColumnCandidate { notes: SolvedNote[]; dropped: { srcIndex: number; pitch: Midi }[]; cost: number; hand: number | null; bass: { course: number; pitch: Midi } | null; key: string }`, `ColumnSolution { candidates: ColumnCandidate[]; badPins: number[] }`.
 - Produces (playability.ts): `fretSpan(ps: Placement[]): number`, `fingersNeeded(ps: Placement[]): number`, `isPlayable(ps: Placement[], limits: Limits): boolean`.
-- Produces (candidates.ts): `maxFretFor(course, limits): number`, `placementsForPitch(pitch, limits): Placement[]`, `pinShift(pin, pitch, limits): number | null`, `shiftedOptions(pitch, limits): NoteOption[]`, `ENUMERATION_CAP = 5000`, `enumerateAssignments(options: Placement[][], limits): Placement[][]` (each result is aligned with `options`, i.e. `result[i]` is the placement for note `i`).
+- Produces (candidates.ts): `maxFretFor(course, limits): number`, `placementsForPitch(pitch, limits): Placement[]`, `pinShift(pin, pitch, limits): number | null`, `shiftedOptions(pitch, limits): NoteOption[]` (the pitch's own placements, or the nearest octave's when it has none), `octaveOptions(pitch, limits): NoteOption[]` (all placements at shifts 0, +12, −12, +24, −24, in that order), `ENUMERATION_CAP = 5000`, `SearchBound { cost: number[][]; limit: () => number }`, `enumerateAssignments(options: Placement[][], limits, bound?: SearchBound, onLeaf?: (ps: Placement[]) => void): Placement[][]` (each result is aligned with `options`, i.e. `result[i]` is the placement for note `i`; with `bound`, branches whose summed option costs exceed `limit()` are skipped; with `onLeaf`, results are streamed to it and the return value is empty).
 
 - [ ] **Step 1: Create `src/core/convert/types.ts`**
 
@@ -1753,7 +1835,7 @@ export function limits(id = 'lute-6-g', maxFret = 8, maxStretch = 4): Limits {
 ```ts
 import { describe, it, expect } from 'vitest';
 import { fingersNeeded, fretSpan, isPlayable } from '../../../src/core/convert/playability';
-import { placementsForPitch, pinShift, shiftedOptions, enumerateAssignments } from '../../../src/core/convert/candidates';
+import { placementsForPitch, pinShift, shiftedOptions, octaveOptions, enumerateAssignments } from '../../../src/core/convert/candidates';
 import { limits } from './helpers';
 
 const P = (course: number, fret: number) => ({ course, fret });
@@ -1795,6 +1877,11 @@ describe('placements', () => {
     expect(pinShift(P(0, 3), 67, limits())).toBeNull();
     expect(pinShift(P(9, 0), 67, limits())).toBeNull();
   });
+  it('lists every octave placement, unshifted first', () => {
+    expect(octaveOptions(67, limits()).map((o) => [o.shifted, o.placement.course, o.placement.fret])).toEqual([
+      [0, 0, 0], [0, 1, 5], [-12, 3, 2], [-12, 4, 7], [-24, 5, 0],
+    ]);
+  });
   it('shifts out-of-range pitches by octaves toward the range', () => {
     expect(shiftedOptions(40, limits())).toEqual([{ placement: P(4, 4), shifted: 12, pinned: false }]);
     expect(shiftedOptions(100, limits())).toEqual([]);
@@ -1811,6 +1898,12 @@ describe('enumerateAssignments', () => {
   });
   it('returns one empty assignment for no notes', () => {
     expect(enumerateAssignments([], limits())).toEqual([[]]);
+  });
+  it('skips branches above the bound and can stream results', () => {
+    const got: unknown[] = [];
+    const r = enumerateAssignments([[P(0, 0), P(1, 5)]], limits(), { cost: [[-0.3, 5]], limit: () => 1 }, (ps) => got.push(ps));
+    expect(r).toEqual([]);
+    expect(got).toEqual([[P(0, 0)]]);
   });
 });
 ```
@@ -1896,39 +1989,75 @@ export function shiftedOptions(pitch: Midi, limits: Limits): NoteOption[] {
   return [];
 }
 
+/** Every placement of the pitch itself and of its octaves (0, +12, −12, +24, −24), in that order. */
+export function octaveOptions(pitch: Midi, limits: Limits): NoteOption[] {
+  const out: NoteOption[] = [];
+  for (const s of [0, 12, -12, 24, -24]) {
+    for (const placement of placementsForPitch(pitch + s, limits)) out.push({ placement, shifted: s, pinned: false });
+  }
+  return out;
+}
+
 export const ENUMERATION_CAP = 5000;
 
-export function enumerateAssignments(options: Placement[][], limits: Limits): Placement[][] {
+/** Optional branch-and-bound for enumerateAssignments. */
+export interface SearchBound {
+  /** additive lower bound on each option's cost, aligned with `options` */
+  cost: number[][];
+  /** current cut-off, read live: a branch whose lower bound is above it is skipped */
+  limit: () => number;
+}
+
+/**
+ * Playable assignments of one placement per note, each note on its own course.
+ * Each result is aligned with `options` (`result[i]` is note i's placement).
+ * With `onLeaf`, results are streamed to it instead of collected (the return value is then empty).
+ */
+export function enumerateAssignments(
+  options: Placement[][],
+  limits: Limits,
+  bound?: SearchBound,
+  onLeaf?: (ps: Placement[]) => void,
+): Placement[][] {
   const order = options.map((_, i) => i).sort((a, b) => options[a].length - options[b].length || a - b);
+  // restMin[k] = cheapest possible cost of the notes order[k..]
+  const restMin = new Array<number>(order.length + 1).fill(0);
+  if (bound) {
+    for (let k = order.length - 1; k >= 0; k--) restMin[k] = restMin[k + 1] + Math.min(...bound.cost[order[k]], Infinity);
+  }
   const results: Placement[][] = [];
   const current: Placement[] = new Array(options.length);
   const used = new Set<number>();
   let visited = 0;
-  const rec = (k: number, lo: number, hi: number) => {
+  const rec = (k: number, lo: number, hi: number, acc: number) => {
     if (visited >= ENUMERATION_CAP) return;
+    if (bound && acc + restMin[k] > bound.limit()) return;
     if (k === order.length) {
       visited++;
       const ps = [...current];
-      if (isPlayable(ps, limits)) results.push(ps);
+      if (isPlayable(ps, limits)) {
+        if (onLeaf) onLeaf(ps);
+        else results.push(ps);
+      }
       return;
     }
     const i = order[k];
-    for (const p of options[i]) {
-      if (used.has(p.course)) continue;
+    options[i].forEach((p, j) => {
+      if (used.has(p.course)) return;
       let nlo = lo;
       let nhi = hi;
       if (p.fret > 0) {
         nlo = Math.min(lo, p.fret);
         nhi = Math.max(hi, p.fret);
-        if (nhi - nlo > limits.maxStretch) continue;
+        if (nhi - nlo > limits.maxStretch) return;
       }
       current[i] = p;
       used.add(p.course);
-      rec(k + 1, nlo, nhi);
+      rec(k + 1, nlo, nhi, acc + (bound ? bound.cost[i][j] : 0));
       used.delete(p.course);
-    }
+    });
   };
-  rec(0, Infinity, -Infinity);
+  rec(0, Infinity, -Infinity, 0);
   return results;
 }
 ```
@@ -1956,16 +2085,16 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Test: `tests/core/convert/cost.test.ts`, `tests/core/convert/column.test.ts`
 
 **Interfaces:**
-- Consumes: Task 8 (`Limits`, `ColumnCandidate`, `ColumnSolution`, `NoteOption`, `enumerateAssignments`, `pinShift`, `shiftedOptions`, `fingersNeeded`, `fretSpan`), `pitchClass` (Task 2).
-- Produces (cost.ts): `WEIGHTS` (fret 1.0, span 1.5, finger 0.5, open −0.3, shifted 5, dropped 10, highPosition 1.0, highPositionFrom 5, move 1.0, bassReuse 0.5), `handOf(ps: Placement[]): number | null`, `placementCost(ps: Placement[], shiftedCount: number, droppedCount: number): number`, `transitionCost(prevHand: number | null, prevBass: ColumnCandidate['bass'], next: ColumnCandidate): number`.
-- Produces (column.ts): `solveColumn(pitches: Midi[], limits: Limits, pins?: Record<number, Placement>, k?: number): ColumnSolution` — candidates sorted by cost then `key`, at most `k` (default 8), never empty.
+- Consumes: Task 8 (`Limits`, `ColumnCandidate`, `ColumnSolution`, `NoteOption`, `enumerateAssignments`, `pinShift`, `shiftedOptions`, `octaveOptions`, `fingersNeeded`, `fretSpan`), `pitchClass` (Task 2).
+- Produces (cost.ts): `WEIGHTS` (fret 1.0, span 1.5, finger 0.5, open −0.3, shifted 5, dropDuplicate 4, dropDoubling 7, dropInner 10, dropTop 16, dropBass 20, dropPinned 30, highPosition 1.0, highPositionFrom 5, move 1.0, bassReuse 0.5), `handOf(ps: Placement[]): number | null`, `placementCost(ps: Placement[], shiftedCount: number, dropPenalty: number): number` (`dropPenalty` is the already-summed role penalty of the dropped notes), `transitionCost(prevHand: number | null, prevBass: ColumnCandidate['bass'], next: ColumnCandidate): number`.
+- Produces (column.ts): `SolveOptions { alternatives?: boolean }`, `solveColumn(pitches: Midi[], limits: Limits, pins?: Record<number, Placement>, k?: number, opts?: SolveOptions): ColumnSolution` — candidates sorted by cost then `key`, at most `k` (default 8), never empty. Pass 1 places every note at its own pitch; only if that fails, pass 2 lets notes move by octaves and tries drop sets smallest first, keeping the cheapest. Musical roles (bass = lowest input pitch, top = highest) come from the input pitches. With `alternatives` (chord boxes) and a full fit, versions without one doubled note are appended after the full-chord candidates.
 
 - [ ] **Step 1: Write the failing tests**
 
 `tests/core/convert/cost.test.ts`:
 ```ts
 import { describe, it, expect } from 'vitest';
-import { placementCost, handOf, transitionCost } from '../../../src/core/convert/cost';
+import { WEIGHTS, placementCost, handOf, transitionCost } from '../../../src/core/convert/cost';
 import type { ColumnCandidate } from '../../../src/core/convert/types';
 
 const P = (course: number, fret: number) => ({ course, fret });
@@ -1978,7 +2107,7 @@ describe('cost', () => {
   it('rewards open strings and charges for frets, fingers, shifts and drops', () => {
     expect(placementCost([P(0, 0)], 0, 0)).toBeCloseTo(-0.3);
     expect(placementCost([P(0, 2), P(1, 2)], 0, 0)).toBeCloseTo(4.5);
-    expect(placementCost([P(0, 2), P(1, 2)], 1, 1)).toBeCloseTo(19.5);
+    expect(placementCost([P(0, 2), P(1, 2)], 1, WEIGHTS.dropInner)).toBeCloseTo(19.5);
   });
   it('charges for high positions above fret 5', () => {
     expect(placementCost([P(0, 7)], 0, 0)).toBeCloseTo(9.5);
@@ -2020,6 +2149,38 @@ describe('solveColumn', () => {
     const low = best.notes.find((n) => n.srcIndex === 5)!;
     expect(low.shifted).toBe(12);
     expect(low.pitch).toBe(52);
+  });
+
+  it('drops only the doubled B2 from a guitar G chord at transpose 0', () => {
+    // B2 and G2 both need course 6; B2 doubles B3, so it is the cheapest note to lose.
+    const best = solveColumn([67, 59, 55, 50, 47, 43], limits()).candidates[0];
+    expect(best.dropped).toEqual([{ srcIndex: 4, pitch: 47 }]);
+    expect(best.notes).toHaveLength(5);
+  });
+
+  it('moves a colliding note up an octave rather than dropping it', () => {
+    // G2 and A2 both need course 6; A3 on course 3 open costs a shift (5), less than a drop.
+    const best = solveColumn([43, 45], limits()).candidates[0];
+    expect(best.dropped).toEqual([]);
+    expect(bySrc(best.notes).map((n) => [n.pitch, n.shifted, n.placement])).toEqual([
+      [43, 0, { course: 5, fret: 0 }],
+      [57, 12, { course: 2, fret: 0 }],
+    ]);
+  });
+
+  it('never shifts a note into unison with another note', () => {
+    for (const c of solveColumn([64, 59, 56, 52, 47, 40], limits()).candidates) {
+      const ps = c.notes.map((n) => n.pitch);
+      expect(new Set(ps).size).toBe(ps.length);
+    }
+  });
+
+  it('offers alternatives without one doubled note, after the full chord', () => {
+    const r = solveColumn([67, 62, 59, 55, 50, 43], limits(), {}, 3, { alternatives: true });
+    expect(r.candidates).toHaveLength(3);
+    expect(r.candidates[0].dropped).toEqual([]);
+    expect(r.candidates[1].dropped).toHaveLength(1);
+    expect(r.candidates.slice(1).every((c) => [55, 62, 50].includes(c.dropped[0].pitch))).toBe(true);
   });
 
   it('keeps bass and top when there are more notes than courses', () => {
@@ -2073,7 +2234,13 @@ export const WEIGHTS = {
   finger: 0.5,
   open: -0.3,
   shifted: 5,
-  dropped: 10,
+  /** drop penalties by musical role (see dropPenalty in column.ts) */
+  dropDuplicate: 4,
+  dropDoubling: 7,
+  dropInner: 10,
+  dropTop: 16,
+  dropBass: 20,
+  dropPinned: 30,
   highPosition: 1.0,
   highPositionFrom: 5,
   move: 1.0,
@@ -2085,7 +2252,7 @@ export function handOf(ps: Placement[]): number | null {
   return f.length ? Math.min(...f) : null;
 }
 
-export function placementCost(ps: Placement[], shiftedCount: number, droppedCount: number): number {
+export function placementCost(ps: Placement[], shiftedCount: number, dropPenalty: number): number {
   const W = WEIGHTS;
   const stopped = ps.filter((p) => p.fret > 0);
   const sumFrets = stopped.reduce((a, p) => a + p.fret, 0);
@@ -2097,7 +2264,7 @@ export function placementCost(ps: Placement[], shiftedCount: number, droppedCoun
     fingersNeeded(ps) * W.finger +
     opens * W.open +
     shiftedCount * W.shifted +
-    droppedCount * W.dropped +
+    dropPenalty +
     Math.max(0, low - W.highPositionFrom) * W.highPosition
   );
 }
@@ -2118,51 +2285,68 @@ export function transitionCost(prevHand: number | null, prevBass: ColumnCandidat
 ```ts
 import type { Midi, Placement } from '../model';
 import type { ColumnCandidate, ColumnSolution, Limits, NoteOption } from './types';
-import { enumerateAssignments, pinShift, shiftedOptions } from './candidates';
-import { handOf, placementCost } from './cost';
+import { enumerateAssignments, octaveOptions, pinShift, shiftedOptions } from './candidates';
+import { WEIGHTS, handOf, placementCost } from './cost';
 import { pitchClass } from '../pitch';
 
-interface NoteIn { srcIndex: number; pitch: Midi; options: NoteOption[]; }
-
-/** Drop priority: identical duplicates, octave doublings (not bass/top), inner voices middle-out, top, bass. Pinned notes last. */
-function dropOrder(notes: NoteIn[]): NoteIn[] {
-  if (notes.length === 0) return [];
-  const byPitch = [...notes].sort((a, b) => a.pitch - b.pitch || a.srcIndex - b.srcIndex);
-  const bass = byPitch[0];
-  const top = byPitch[byPitch.length - 1];
-  const order: NoteIn[] = [];
-  const push = (n: NoteIn) => {
-    if (!order.includes(n)) order.push(n);
-  };
-  const seenPitch = new Set<Midi>();
-  for (const n of byPitch) {
-    if (seenPitch.has(n.pitch)) push(n);
-    else seenPitch.add(n.pitch);
-  }
-  const seenPc = new Set<number>();
-  for (const n of byPitch) {
-    const pc = pitchClass(n.pitch);
-    if (seenPc.has(pc)) {
-      if (n !== bass && n !== top) push(n);
-    } else seenPc.add(pc);
-  }
-  const inner = byPitch.slice(1, -1);
-  const mid = (inner.length - 1) / 2;
-  inner
-    .map((n, i) => ({ n, i, d: Math.abs(i - mid) }))
-    .sort((a, b) => a.d - b.d || a.i - b.i)
-    .forEach(({ n }) => push(n));
-  push(top);
-  push(bass);
-  const pinned = (n: NoteIn) => n.options.some((o) => o.pinned);
-  return [...order.filter((n) => !pinned(n)), ...order.filter(pinned)];
+interface NoteIn {
+  srcIndex: number;
+  /** input pitch (after transpose, before any octave shift) */
+  pitch: Midi;
+  /** pass 1 options: the pitch itself, or its nearest octave when the pitch has no placement */
+  direct: NoteOption[];
+  /** pass 2 options: the pitch and all its octaves */
+  all: NoteOption[];
+  pinned: boolean;
 }
 
-function build(active: NoteIn[], ps: Placement[], dropped: ColumnCandidate['dropped']): ColumnCandidate {
+interface Roles { bass: NoteIn | undefined; top: NoteIn | undefined; }
+
+/** Musical roles come from the input pitches, so an octave shift never changes which note is the bass or the top. */
+function rolesOf(notes: NoteIn[]): Roles {
+  const low = [...notes].sort((a, b) => a.pitch - b.pitch || a.srcIndex - b.srcIndex)[0];
+  const high = [...notes].sort((a, b) => b.pitch - a.pitch || a.srcIndex - b.srcIndex)[0];
+  return { bass: low, top: high };
+}
+
+/** Penalty for dropping `n` while `kept` still sound: duplicate < octave doubling < inner voice < top < bass < pinned. */
+function dropPenalty(n: NoteIn, kept: NoteIn[], roles: Roles): number {
+  if (n.pinned) return WEIGHTS.dropPinned;
+  if (n === roles.bass) return WEIGHTS.dropBass;
+  if (n === roles.top) return WEIGHTS.dropTop;
+  if (kept.some((k) => k.pitch === n.pitch)) return WEIGHTS.dropDuplicate;
+  if (kept.some((k) => pitchClass(k.pitch) === pitchClass(n.pitch))) return WEIGHTS.dropDoubling;
+  return WEIGHTS.dropInner;
+}
+
+/** Additive part of placementCost for one option: a lower bound, since span, finger and position costs are never negative. */
+const optionCost = (o: NoteOption) => (o.placement.fret > 0 ? o.placement.fret * WEIGHTS.fret : WEIGHTS.open) + (o.shifted !== 0 ? WEIGHTS.shifted : 0);
+
+const byCost = (a: ColumnCandidate, b: ColumnCandidate) => a.cost - b.cost || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+
+/** Keeps the k cheapest candidates; `limit()` is the cost a newcomer must not exceed. */
+class TopK {
+  readonly items: ColumnCandidate[] = [];
+  constructor(private readonly k: number) {}
+  limit(): number {
+    return this.items.length < this.k ? Infinity : this.items[this.items.length - 1].cost;
+  }
+  add(c: ColumnCandidate): void {
+    if (c.cost > this.limit()) return;
+    let i = this.items.length;
+    while (i > 0 && byCost(c, this.items[i - 1]) < 0) i--;
+    this.items.splice(i, 0, c);
+    if (this.items.length > this.k) this.items.pop();
+  }
+}
+
+function build(active: NoteIn[], options: NoteOption[][], ps: Placement[], dropped: NoteIn[], penalty: number): ColumnCandidate | null {
   const notes = active.map((n, i) => {
-    const opt = n.options.find((o) => o.placement.course === ps[i].course && o.placement.fret === ps[i].fret)!;
+    const opt = options[i].find((o) => o.placement.course === ps[i].course && o.placement.fret === ps[i].fret)!;
     return { srcIndex: n.srcIndex, pitch: n.pitch + opt.shifted, shifted: opt.shifted, placement: ps[i], pinned: opt.pinned };
   });
+  // An octave shift that lands in unison with another note is a drop in disguise.
+  if (notes.some((a) => a.shifted !== 0 && notes.some((b) => b !== a && b.pitch === a.pitch))) return null;
   const shiftedCount = notes.filter((n) => n.shifted !== 0).length;
   const bassNote = notes.length ? notes.reduce((a, b) => (b.pitch < a.pitch ? b : a)) : null;
   const key = [...notes]
@@ -2171,42 +2355,109 @@ function build(active: NoteIn[], ps: Placement[], dropped: ColumnCandidate['drop
     .join(',');
   return {
     notes,
-    dropped,
-    cost: placementCost(ps, shiftedCount, dropped.length),
+    dropped: [...dropped].sort((a, b) => a.srcIndex - b.srcIndex).map((n) => ({ srcIndex: n.srcIndex, pitch: n.pitch })),
+    cost: placementCost(ps, shiftedCount, penalty),
     hand: handOf(ps),
     bass: bassNote ? { course: bassNote.placement.course, pitch: bassNote.pitch } : null,
     key,
   };
 }
 
-export function solveColumn(pitches: Midi[], limits: Limits, pins: Record<number, Placement> = {}, k = 8): ColumnSolution {
+/** Adds every playable assignment of `active` that could make the top k to `top`. */
+function search(active: NoteIn[], pick: 'direct' | 'all', dropped: NoteIn[], penalty: number, limits: Limits, top: TopK): void {
+  // Shifted options that would sound in unison with another note's own pitch are never useful.
+  const options = active.map((n) => n[pick].filter((o) => o.shifted === 0 || !active.some((m) => m !== n && m.pitch === n.pitch + o.shifted)));
+  enumerateAssignments(
+    options.map((os) => os.map((o) => o.placement)),
+    limits,
+    { cost: options.map((os) => os.map(optionCost)), limit: () => top.limit() - penalty },
+    (ps) => {
+      const c = build(active, options, ps, dropped, penalty);
+      if (c) top.add(c);
+    },
+  );
+}
+
+function* subsets<T>(items: T[], size: number, start = 0): Generator<T[]> {
+  if (size === 0) {
+    yield [];
+    return;
+  }
+  for (let i = start; i <= items.length - size; i++) {
+    for (const rest of subsets(items, size - 1, i + 1)) yield [items[i], ...rest];
+  }
+}
+
+export interface SolveOptions {
+  /** chord boxes: when the whole chord fits, also offer versions that leave out one doubled note */
+  alternatives?: boolean;
+}
+
+/**
+ * Pass 1: every note at its own pitch (a note with no placement at all takes its nearest octave).
+ * Pass 2, only when pass 1 finds nothing: notes may move by octaves and may be dropped. Drop sets are
+ * tried smallest first and the cheapest result wins, so a shift (5) beats dropping a doubling (7),
+ * and dropping a doubling beats losing the bass (20). Branch-and-bound keeps only the k cheapest.
+ */
+export function solveColumn(
+  pitches: Midi[],
+  limits: Limits,
+  pins: Record<number, Placement> = {},
+  k = 8,
+  opts: SolveOptions = {},
+): ColumnSolution {
   const badPins: number[] = [];
-  const all: NoteIn[] = pitches.map((pitch, srcIndex) => {
+  const notes: NoteIn[] = pitches.map((pitch, srcIndex) => {
     const pin = pins[srcIndex];
     if (pin) {
       const s = pinShift(pin, pitch, limits);
-      if (s !== null) return { srcIndex, pitch, options: [{ placement: pin, shifted: s, pinned: true }] };
+      if (s !== null) {
+        const only = [{ placement: pin, shifted: s, pinned: true }];
+        return { srcIndex, pitch, direct: only, all: only, pinned: true };
+      }
       badPins.push(srcIndex);
     }
-    return { srcIndex, pitch, options: shiftedOptions(pitch, limits) };
+    return { srcIndex, pitch, direct: shiftedOptions(pitch, limits), all: octaveOptions(pitch, limits), pinned: false };
   });
-  const dropped: ColumnCandidate['dropped'] = all
-    .filter((n) => n.options.length === 0)
-    .map((n) => ({ srcIndex: n.srcIndex, pitch: n.pitch }));
-  let active = all.filter((n) => n.options.length > 0);
-  const order = dropOrder(active);
-  const run = () => enumerateAssignments(active.map((n) => n.options.map((o) => o.placement)), limits);
-  let assignments = run();
-  let oi = 0;
-  while (assignments.length === 0 && oi < order.length) {
-    const victim = order[oi++];
-    active = active.filter((n) => n !== victim);
-    dropped.push({ srcIndex: victim.srcIndex, pitch: victim.pitch });
-    assignments = run();
+  const roles = rolesOf(notes);
+  const forced = notes.filter((n) => n.all.length === 0);
+  const placeable = notes.filter((n) => n.all.length > 0);
+  const penaltyOf = (dropped: NoteIn[], kept: NoteIn[]) => dropped.reduce((a, n) => a + dropPenalty(n, kept, roles), 0);
+  const forcedPenalty = penaltyOf(forced, placeable);
+  const size = Math.max(1, k);
+
+  const primary = new TopK(size);
+  search(placeable, 'direct', forced, forcedPenalty, limits, primary);
+
+  const extra = new TopK(size);
+  if (primary.items.length === 0) {
+    const floor = (kept: number) => kept * WEIGHTS.open; // the cheapest any placement can be
+    for (let d = 0; d <= placeable.length; d++) {
+      if (forcedPenalty + d * WEIGHTS.dropDuplicate + floor(placeable.length - d) > primary.limit()) break;
+      for (const drop of subsets(placeable, d)) {
+        const kept = placeable.filter((n) => !drop.includes(n));
+        const penalty = penaltyOf([...forced, ...drop], kept);
+        if (penalty + floor(kept.length) > primary.limit()) continue;
+        search(kept, 'all', [...forced, ...drop], penalty, limits, primary);
+      }
+    }
+  } else if (opts.alternatives) {
+    for (const n of placeable) {
+      if (n.pinned || n === roles.bass || n === roles.top) continue;
+      const kept = placeable.filter((x) => x !== n);
+      const penalty = penaltyOf([...forced, n], kept);
+      if (penalty > WEIGHTS.dropDoubling) continue;
+      search(kept, 'direct', [...forced, n], penalty, limits, extra);
+    }
   }
-  const candidates = assignments.map((ps) => build(active, ps, [...dropped]));
-  candidates.sort((a, b) => a.cost - b.cost || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  return { candidates: candidates.slice(0, Math.max(1, k)), badPins };
+
+  // Full-chord candidates always come first, so alternatives never replace the default voicing.
+  const candidates = [...primary.items, ...extra.items].slice(0, size);
+  if (candidates.length === 0) {
+    // Only reachable if the enumeration cap cut every search short; never return an empty list.
+    candidates.push({ notes: [], dropped: notes.map((n) => ({ srcIndex: n.srcIndex, pitch: n.pitch })), cost: penaltyOf(notes, []), hand: null, bass: null, key: '' });
+  }
+  return { candidates, badPins };
 }
 ```
 
@@ -2353,15 +2604,15 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: Tasks 2–10 (`chordPitches`, `columnPitches`, `preferFlats`, `midiToName`, `prettyName`, `detectChordName`, `transposeChordName`, `solveColumn`, `viterbi`, `placementsForPitch`).
-- Produces (convert.ts): `limitsOf(s: LuteSettings): Limits`, `convertPiece(piece: Piece, transpose?: number): LuteResult`, `placementCycle(pitch: Midi, limits: Limits): { placement: Placement; shifted: number }[]` (order: shifts 0, +12, −12, +24, −24; courses ascending within a shift), `nextPlacement(pitch: Midi, current: Placement, limits: Limits): Placement` (`pitch` is the *unshifted* input pitch + transpose, i.e. `LuteNote.pitch - LuteNote.shifted`).
+- Produces (convert.ts): `limitsOf(s: LuteSettings): Limits`, `convertPiece(piece: Piece, transpose?: number): LuteResult`, `placementCycle(pitch: Midi, limits: Limits): { placement: Placement; shifted: number }[]` (order: shifts 0, +12, −12, +24, −24; courses ascending within a shift), `nextPlacement(pitch: Midi, current: Placement, limits: Limits, others?: { placement: Placement; pitch: Midi }[]): Placement` (`pitch` is the *unshifted* input pitch + transpose, i.e. `LuteNote.pitch - LuteNote.shifted`; options on the others' courses, octave shifts into unison with them, and unplayable shapes are skipped), `cycleNote(shown: LuteNote[], srcNoteIndex: number, limits: Limits): Record<number, Placement> | null` (pins for every shown note, with the clicked one moved).
 - Produces (autoTranspose.ts): `AUTO_SHIFT_PENALTY = 20`, `AUTO_DROP_PENALTY = 50`, `autoTranspose(piece: Piece): number` (−6..+6; ties: smaller |t|, then positive).
-- Behaviour: chord voicings come from `solveColumn(..., k = 3)`; `chosen` clamps `overrides.chordVoicing[i]`; warnings: `shift` / `inversion` (bass shifted) / `drop` / `pin`, with `chord` or `tabColumn` + `line` set.
+- Behaviour: chord voicings come from `solveColumn(..., k = 3, { alternatives: true })`; `chosen` clamps `overrides.chordVoicing[i]`; a typed chord name is transposed by `capo + transpose` (it names the shape); identical tab columns are solved once (memoised by pitches + pins); warnings: `shift` / `inversion` (bass shifted, or the lowest output note has a different pitch class from the input bass) / `drop` / `pin`, with `chord` or `tabColumn` + `line` set.
 
 - [ ] **Step 1: Write the failing test `tests/core/convert/convert.test.ts`**
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { convertPiece, limitsOf, nextPlacement, placementCycle } from '../../../src/core/convert/convert';
+import { convertPiece, cycleNote, limitsOf, nextPlacement, placementCycle } from '../../../src/core/convert/convert';
 import { autoTranspose } from '../../../src/core/convert/autoTranspose';
 import { newPiece, columnPitches } from '../../../src/core/piece';
 import { parseAsciiTab } from '../../../src/core/parse/asciiTab';
@@ -2425,11 +2676,59 @@ describe('convertPiece — chords', () => {
     p.lute.transpose = 3;
     expect(convertPiece(p).chords[0].name).toBe('G');
   });
+  it('moves typed chord names with the capo as well as the transpose', () => {
+    const p = piece([{ ...E, name: 'E' }, E]);
+    p.guitar.capo = 2;
+    p.lute.transpose = 3;
+    expect(convertPiece(p).chords.map((c) => c.name)).toEqual(['A', 'A']);
+  });
+  it('warns when a note moved below the bass changes the inversion', () => {
+    // G4 + A3; pinning G4 two octaves down to course 6 open puts G2 under the A
+    const p = piece([{ name: '', frets: [3, null, 2, null, null, null], baseFret: 1 }]);
+    p.overrides.chordPins = { 0: { 0: { course: 5, fret: 0 } } };
+    const w = convertPiece(p).warnings;
+    expect(w.filter((x) => x.kind === 'inversion')).toHaveLength(1);
+  });
+  it('offers alternative voicings for a full six-note chord', () => {
+    const p = piece([E]);
+    p.lute.transpose = 3;
+    const c = convertPiece(p).chords[0];
+    expect(c.voicings.length).toBeGreaterThan(1);
+    expect(c.voicings[0].dropped).toEqual([]);
+  });
   it('handles an all-muted chord', () => {
     const r = convertPiece(piece([{ name: '', frets: ['x', 'x', 'x', 'x', 'x', 'x'], baseFret: 1 }]));
     expect(r.chords[0].voicings[0].notes).toEqual([]);
     expect(r.chords[0].name).toBe('');
     expect(r.warnings).toEqual([]);
+  });
+});
+
+// Guitar in E at +3 is a lute in G: the same frets on every string except the 3rd, which is one fret higher.
+const OPEN_SHAPES: [string, ChordShape['frets'], string, number][] = [
+  ['E', [0, 0, 1, 2, 2, 0], 'G', 1],
+  ['A', [0, 2, 2, 2, 0, 'x'], 'C', 0],
+  ['D', [2, 3, 2, 0, 'x', 'x'], 'F', 0],
+  ['G', [3, 0, 0, 0, 2, 3], 'Bb', 1],
+  ['C', [0, 1, 0, 2, 3, 'x'], 'Eb', 0],
+  ['Em', [0, 0, 0, 2, 2, 0], 'Gm', 1],
+  ['Am', [0, 1, 2, 2, 0, 'x'], 'Cm', 0],
+];
+
+describe('convertPiece — known chord mappings', () => {
+  it.each(OPEN_SHAPES)('maps the open %s shape at +3 to the matching lute shape (%s)', (_, frets, name) => {
+    const p = piece([{ name: '', frets, baseFret: 1 }]);
+    p.lute.transpose = 3;
+    const r = convertPiece(p);
+    const expected = frets.flatMap((f, s) => (typeof f === 'number' ? [{ course: s, fret: f + (s === 2 ? 1 : 0) }] : []));
+    expect(bySrc(r.chords[0].voicings[0].notes).map((n) => n.placement)).toEqual(expected);
+    expect(r.chords[0].name).toBe(name);
+    expect(r.warnings).toEqual([]);
+  });
+  it.each(OPEN_SHAPES)('keeps the open %s shape at transpose 0 losing at most one doubled note', (_, frets, __, drops) => {
+    const r = convertPiece(piece([{ name: '', frets, baseFret: 1 }]));
+    expect(r.stats.dropped).toBe(drops);
+    expect(r.warnings.filter((w) => w.kind === 'drop')).toHaveLength(drops);
   });
 });
 
@@ -2508,6 +2807,9 @@ describe('convertPiece — tab', () => {
     const t0 = performance.now();
     convertPiece(p);
     expect(performance.now() - t0).toBeLessThan(4000);
+    const t1 = performance.now();
+    autoTranspose(p);
+    expect(performance.now() - t1).toBeLessThan(15000);
   });
 });
 
@@ -2519,6 +2821,35 @@ describe('manual override cycling', () => {
     ]);
     expect(nextPlacement(67, { course: 0, fret: 0 }, L)).toEqual({ course: 1, fret: 5 });
     expect(nextPlacement(67, { course: 5, fret: 0 }, L)).toEqual({ course: 0, fret: 0 });
+  });
+  it('skips placements that clash with the notes that stay', () => {
+    const L = limitsOf(newPiece().lute);
+    // course 2 is taken by D4, so G4 goes to G3 on course 4 fret 2 next
+    expect(nextPlacement(67, { course: 0, fret: 0 }, L, [{ placement: { course: 1, fret: 0 }, pitch: 62 }])).toEqual({ course: 3, fret: 2 });
+  });
+  it('never drops or moves another note of a chord', () => {
+    let p = piece([{ name: '', frets: [3, 0, 0, null, null, null], baseFret: 1 }]);
+    p.overrides.chordVoicing = { 0: 1 };
+    for (let k = 0; k < 4; k++) {
+      const c = convertPiece(p).chords[0];
+      const pins = cycleNote(c.voicings[c.chosen].notes, 0, limitsOf(p.lute))!;
+      p = { ...p, overrides: { ...p.overrides, chordPins: { 0: pins }, chordVoicing: {} } };
+      const after = convertPiece(p).chords[0];
+      const v = after.voicings[after.chosen];
+      expect(v.dropped).toEqual([]);
+      expect(Object.fromEntries(v.notes.map((n) => [n.srcNoteIndex, n.placement]))).toEqual(pins);
+    }
+  });
+  it('never drops or moves another note of a tab column', () => {
+    let p = piece([], ['e|---3---|', 'B|---0---|', 'G|-------|', 'D|-------|', 'A|-------|', 'E|-------|'].join('\n'));
+    p.lute.transpose = 3;
+    for (let k = 0; k < 4; k++) {
+      const pins = cycleNote(cols(convertPiece(p))[0].notes, 1, limitsOf(p.lute))!;
+      p = { ...p, overrides: { ...p.overrides, tabPins: { 0: pins } } };
+      const col = cols(convertPiece(p))[0];
+      expect(col.dropped).toEqual([]);
+      expect(Object.fromEntries(col.notes.map((n) => [n.srcNoteIndex, n.placement]))).toEqual(pins);
+    }
   });
 });
 
@@ -2543,13 +2874,14 @@ Expected: FAIL — modules not found.
 import type {
   LuteChord, LuteNote, LuteResult, LuteSettings, LuteTabEvent, Midi, Piece, Placement, Warning,
 } from '../model';
-import type { ColumnCandidate, Limits } from './types';
+import type { ColumnCandidate, ColumnSolution, Limits } from './types';
 import { chordPitches, columnPitches } from '../piece';
-import { midiToName, preferFlats, prettyName } from '../pitch';
+import { midiToName, pitchClass, preferFlats, prettyName } from '../pitch';
 import { detectChordName, transposeChordName } from '../chordName';
 import { solveColumn } from './column';
 import { viterbi } from './viterbi';
 import { placementsForPitch } from './candidates';
+import { isPlayable } from './playability';
 
 export function limitsOf(s: LuteSettings): Limits {
   return { tuning: s.tuning, maxFret: s.maxFret, maxStretch: s.maxStretch };
@@ -2574,10 +2906,12 @@ export function convertPiece(piece: Piece, transpose: number = piece.lute.transp
 
   const report = (c: ColumnCandidate, inputs: Midi[], where: string, extra: Partial<Warning>) => {
     const bassSrc = inputs.length ? inputs.indexOf(Math.min(...inputs)) : -1;
+    let bassReported = false;
     for (const n of c.notes) {
       if (n.shifted === 0) continue;
       stats.shifted++;
       const isBass = n.srcIndex === bassSrc;
+      if (isBass) bassReported = true;
       const dir = n.shifted > 0 ? 'up' : 'down';
       const amount = Math.abs(n.shifted) === 24 ? 'two octaves' : 'an octave';
       warnings.push({
@@ -2590,6 +2924,17 @@ export function convertPiece(piece: Piece, transpose: number = piece.lute.transp
       stats.dropped++;
       warnings.push({ kind: 'drop', message: `${where}: ${nm(d.pitch)} dropped (no playable place).`, ...extra });
     }
+    // A dropped bass, or another note shifted below it, also changes the inversion.
+    if (!bassReported && c.notes.length && bassSrc >= 0) {
+      const low = c.notes.reduce((a, b) => (b.pitch < a.pitch ? b : a));
+      if (pitchClass(low.pitch) !== pitchClass(inputs[bassSrc])) {
+        warnings.push({
+          kind: 'inversion',
+          message: `${where}: the lowest note is now ${nm(low.pitch)} instead of ${nm(inputs[bassSrc])}, so the inversion changed.`,
+          ...extra,
+        });
+      }
+    }
   };
   const reportPins = (bad: number[], where: string, extra: Partial<Warning>) => {
     for (const i of bad) {
@@ -2600,10 +2945,11 @@ export function convertPiece(piece: Piece, transpose: number = piece.lute.transp
   let totalCost = 0;
   const chords: LuteChord[] = piece.guitar.chords.map((shape, i) => {
     const pitches = chordInputs[i];
-    const sol = solveColumn(pitches, limits, piece.overrides.chordPins[i] ?? {}, 3);
+    const sol = solveColumn(pitches, limits, piece.overrides.chordPins[i] ?? {}, 3, { alternatives: true });
     const voicings = sol.candidates.map((c) => ({ notes: toLuteNotes(c), dropped: c.dropped.map((d) => d.pitch), cost: c.cost }));
     const chosen = Math.max(0, Math.min(piece.overrides.chordVoicing[i] ?? 0, voicings.length - 1));
-    const name = shape.name.trim() ? transposeChordName(shape.name.trim(), transpose, flats) : detectChordName(pitches, flats);
+    // A typed name describes the shape, so it moves with the capo as well as the transpose.
+    const name = shape.name.trim() ? transposeChordName(shape.name.trim(), capo + transpose, flats) : detectChordName(pitches, flats);
     const where = `Chord ${i + 1}${name ? ` (${prettyName(name)})` : ''}`;
     reportPins(sol.badPins, where, { chord: i });
     const picked = sol.candidates[chosen];
@@ -2614,7 +2960,18 @@ export function convertPiece(piece: Piece, transpose: number = piece.lute.transp
     return { name, voicings, chosen };
   });
 
-  const solutions = colInputs.map((pitches, ci) => solveColumn(pitches, limits, piece.overrides.tabPins[ci] ?? {}));
+  // Songs repeat columns a lot; solve each distinct (pitches, pins) once.
+  const memo = new Map<string, ColumnSolution>();
+  const solutions = colInputs.map((pitches, ci) => {
+    const pins = piece.overrides.tabPins[ci] ?? {};
+    const key = `${pitches.join(',')}|${JSON.stringify(pins)}`;
+    let sol = memo.get(key);
+    if (!sol) {
+      sol = solveColumn(pitches, limits, pins);
+      memo.set(key, sol);
+    }
+    return sol;
+  });
   const { path, cost } = viterbi(solutions.map((s) => s.candidates));
   totalCost += cost;
   const tab: LuteTabEvent[] = [];
@@ -2643,11 +3000,41 @@ export function placementCycle(pitch: Midi, limits: Limits): { placement: Placem
   return out;
 }
 
-export function nextPlacement(pitch: Midi, current: Placement, limits: Limits): Placement {
-  const cycle = placementCycle(pitch, limits);
-  if (cycle.length === 0) return current;
-  const i = cycle.findIndex((c) => c.placement.course === current.course && c.placement.fret === current.fret);
-  return cycle[(i + 1) % cycle.length].placement;
+/**
+ * The next placement for a clicked note. `others` are the notes that stay in the column or chord:
+ * options on their courses, octave shifts into unison with them, and shapes that become
+ * unplayable are skipped, so cycling one note never forces another out.
+ */
+export function nextPlacement(
+  pitch: Midi,
+  current: Placement,
+  limits: Limits,
+  others: { placement: Placement; pitch: Midi }[] = [],
+): Placement {
+  const same = (p: Placement) => p.course === current.course && p.fret === current.fret;
+  const usable = placementCycle(pitch, limits).filter(
+    (c) =>
+      same(c.placement) ||
+      (!others.some((o) => o.placement.course === c.placement.course) &&
+        !(c.shifted !== 0 && others.some((o) => o.pitch === pitch + c.shifted)) &&
+        isPlayable([...others.map((o) => o.placement), c.placement], limits)),
+  );
+  if (usable.length === 0) return current;
+  const i = usable.findIndex((c) => same(c.placement));
+  return usable[(i + 1) % usable.length].placement;
+}
+
+/**
+ * Pins for a click on one shown note: the clicked note moves to its next placement and every
+ * other shown note is pinned where it is, so the shape on screen is exactly what is kept.
+ */
+export function cycleNote(shown: LuteNote[], srcNoteIndex: number, limits: Limits): Record<number, Placement> | null {
+  const n = shown.find((x) => x.srcNoteIndex === srcNoteIndex);
+  if (!n) return null;
+  const next = nextPlacement(n.pitch - n.shifted, n.placement, limits, shown.filter((x) => x !== n));
+  const pins: Record<number, Placement> = {};
+  for (const x of shown) pins[x.srcNoteIndex] = x === n ? next : x.placement;
+  return pins;
 }
 ```
 
@@ -2696,7 +3083,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: model types, `emptyOverrides` (Task 2), `TextImport` (Task 6).
-- Produces: `touch(p): Piece`, `setTitle(p, title): Piece`, `emptyChord(strings?: number): ChordShape`, `toggleFret(shape, string, fret): ChordShape`, `cycleOpen(shape, string): ChordShape` (unset → open → muted → unset; a fretted string goes to open), `shiftBaseFret(shape, delta): ChordShape` (clamped 1..15), `addChord(p)`, `removeChord(p, i)`, `moveChord(p, i, dir: -1 | 1)`, `updateChord(p, i, shape)`, `setGuitarTuning(p, tuning)`, `setCapo(p, capo)`, `applyImport(p, imp: TextImport, sourceText: string)`, `setLuteSettings(p, patch: Partial<LuteSettings>)`, `setTabPin(p, col, note, placement)`, `setChordPin(p, chord, note, placement)`, `setChordVoicing(p, chord, v)`, `clearOverrides(p)` — all return a new `Piece` (never mutate).
+- Produces: `touch(p): Piece`, `setTitle(p, title): Piece`, `emptyChord(strings?: number): ChordShape`, `toggleFret(shape, string, fret): ChordShape`, `cycleOpen(shape, string): ChordShape` (unset → open → muted → unset; a fretted string goes to open), `shiftBaseFret(shape, delta): ChordShape` (clamped 1..15), `addChord(p)`, `removeChord(p, i)`, `moveChord(p, i, dir: -1 | 1)`, `updateChord(p, i, shape)`, `setGuitarTuning(p, tuning)`, `setCapo(p, capo)`, `applyImport(p, imp: TextImport, sourceText: string)`, `setLuteSettings(p, patch: Partial<LuteSettings>)`, `setTabPin(p, col, note, placement)`, `setChordPin(p, chord, note, placement)`, `setChordVoicing(p, chord, v)`, `pinTabColumn(p, col, placements: Record<number, Placement>)` (replaces that column's pins), `pinChord(p, chord, placements)` (replaces that chord's pins and clears its `chordVoicing` entry), `clearOverrides(p)` — all return a new `Piece` (never mutate).
 
 - [ ] **Step 1: Write the failing test `tests/core/edit.test.ts`**
 
@@ -2802,6 +3189,18 @@ describe('piece edits', () => {
     expect(E.setGuitarTuning(p, findPreset('guitar-dadgad')!).guitar.tuning.id).toBe('guitar-dadgad');
     expect(E.setCapo(p, 4).guitar.capo).toBe(4);
     expect(E.setTitle(p, 'Greensleeves').title).toBe('Greensleeves');
+  });
+});
+
+describe('whole-shape pins', () => {
+  it('replaces a column or chord pin set and clears the chord voicing index', () => {
+    let p = E.setTabPin(newPiece(), 0, 3, { course: 0, fret: 1 });
+    p = E.pinTabColumn(p, 0, { 0: { course: 1, fret: 0 }, 1: { course: 2, fret: 2 } });
+    expect(p.overrides.tabPins).toEqual({ 0: { 0: { course: 1, fret: 0 }, 1: { course: 2, fret: 2 } } });
+    p = E.setChordVoicing(p, 1, 2);
+    p = E.pinChord(p, 1, { 0: { course: 0, fret: 0 } });
+    expect(p.overrides.chordPins).toEqual({ 1: { 0: { course: 0, fret: 0 } } });
+    expect(p.overrides.chordVoicing).toEqual({});
   });
 });
 ```
@@ -2937,6 +3336,18 @@ export function setChordVoicing(p: Piece, chord: number, v: number): Piece {
 export function clearOverrides(p: Piece): Piece {
   return { ...p, overrides: emptyOverrides() };
 }
+
+/** Replaces all pins of one tab column (note index → placement). */
+export function pinTabColumn(p: Piece, col: number, placements: Record<number, Placement>): Piece {
+  return { ...p, overrides: { ...p.overrides, tabPins: { ...p.overrides.tabPins, [col]: { ...placements } } } };
+}
+
+/** Replaces all pins of one chord and clears its chosen-voicing index (pins re-rank the voicings). */
+export function pinChord(p: Piece, chord: number, placements: Record<number, Placement>): Piece {
+  const chordVoicing = { ...p.overrides.chordVoicing };
+  delete chordVoicing[chord];
+  return { ...p, overrides: { ...p.overrides, chordPins: { ...p.overrides.chordPins, [chord]: { ...placements } }, chordVoicing } };
+}
 ```
 
 - [ ] **Step 4: Run tests and typecheck**
@@ -2967,7 +3378,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Check the TabCode bass-course syntax**
 
-Read the TabCode specification (ECOLM / Tim Crawford's TabCode documentation — search "TabCode lute tablature encoding specification"). Confirm (a) courses 1–6 are written as fret letter + course digit (`c2`), (b) how the 7th course is written, and (c) how courses 8+ (diapasons) are written. The defaults below assume `a7` for the 7th course and `X` + letter + one `/` per course beyond the 8th (`Xa`, `Xa/`, `Xa//`). If the specification differs, change `tabCodeNote` and the matching expectations in Step 2 to follow it, and note the source URL in a comment above `tabCodeNote`.
+Read the TabCode specification (ECOLM / Tim Crawford's TabCode documentation — search "TabCode lute tablature encoding specification"). Confirm (a) courses 1–6 are written as fret letter + course digit (`c2`), (b) how the 7th course is written, and (c) how courses 8+ (diapasons) are written. The defaults below assume `a7` for the 7th course and `X` + letter + one `/` per course beyond the 8th (`Xa`, `Xa/`, `Xa//`). Also confirm (d) how a system (line) break is marked: the defaults below start a new text line at each `break`, but TabCode may use an explicit token such as `{^}` (with `{>}` for a page break); and (e) that `{...}` is a comment, as the title and section headings below assume. If the specification differs, change `tabCodeNote`/`toTabCode` and the matching expectations in Step 2 to follow it, and note the source URL in a comment above `tabCodeNote`.
 
 - [ ] **Step 2: Write the failing test `tests/core/tabcode.test.ts`**
 
@@ -3012,7 +3423,8 @@ import { FRENCH_FRETS } from './notation';
 
 /** 0-based course. Courses 1-7: letter + course number; 8th+: X + letter + one slash per course beyond the 8th. */
 export function tabCodeNote(course: number, fret: number): string {
-  const letter = FRENCH_FRETS[fret] ?? 'a';
+  const letter = FRENCH_FRETS[fret];
+  if (letter === undefined) throw new RangeError(`TabCode has no letter for fret ${fret}.`);
   if (course < 7) return `${letter}${course + 1}`;
   return `X${letter}${'/'.repeat(course - 7)}`;
 }
@@ -3071,7 +3483,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `Piece`, `SCHEMA_VERSION` (Task 2), `newPiece` (Task 3, tests).
-- Produces: `StorageLike { getItem; setItem; removeItem }`, `PieceMeta { id; title; updatedAt }`, `MemoryStorage` (in-memory `StorageLike`), `browserStorage(): StorageLike` (localStorage, or `MemoryStorage` when unavailable), `migrate(raw: unknown): Piece` (throws `Error` with a user-readable message), `PieceStore` with `list(): PieceMeta[]` (most recent first; `[]` on corrupt index), `load(id): Piece | null` (throws on corrupt data), `save(p): void` (may throw on quota), `remove(id): void`; `exportPieces(pieces: Piece[]): string`, `importPieces(text: string): Piece[]`.
+- Produces: `StorageLike { getItem; setItem; removeItem }`, `PieceMeta { id; title; updatedAt }`, `MemoryStorage` (in-memory `StorageLike`), `browserStorage(): StorageLike` (localStorage, or `MemoryStorage` when unavailable), `migrate(raw: unknown): Piece` (checks the schema version and the whole structure — tunings, chords, tab events, lute settings, overrides — and throws `Error` with a user-readable message naming the bad field), `PieceStore` with `list(): PieceMeta[]` (most recent first; `[]` on corrupt index), `load(id): Piece | null` (throws on corrupt data), `save(p): void` (may throw on quota), `remove(id): void`; `exportPieces(pieces: Piece[]): string`, `importPieces(text: string): Piece[]`.
 
 - [ ] **Step 1: Write the failing test `tests/core/storage.test.ts`**
 
@@ -3117,6 +3529,24 @@ describe('migrate', () => {
     expect(() => migrate({ id: 'x' })).toThrow(/schemaVersion/);
     expect(() => migrate({ schemaVersion: 1, id: 'x' })).toThrow(/Invalid piece/);
     expect(() => migrate(null)).toThrow();
+  });
+  it('rejects data that parses but has the wrong shape', () => {
+    const ok = () => JSON.parse(JSON.stringify(newPiece())) as Record<string, any>;
+    const broken = [
+      (p: any) => { p.guitar = {}; },
+      (p: any) => { p.guitar.tab = 'nope'; },
+      (p: any) => { p.guitar.tab = [{ kind: 'col', col: { x: 0, notes: [{ string: 'a', fret: 1 }] } }]; },
+      (p: any) => { p.guitar.chords = [{ name: '', frets: [0, 0], baseFret: 1 }]; },
+      (p: any) => { p.lute.tuning.courses = []; },
+      (p: any) => { p.lute.maxFret = '8'; },
+      (p: any) => { p.lute.notation = 'german'; },
+      (p: any) => { p.overrides.tabPins = { 0: { 0: { course: 1 } } }; },
+    ];
+    for (const breakIt of broken) {
+      const p = ok();
+      breakIt(p);
+      expect(() => migrate(p)).toThrow(/Invalid piece \(/);
+    }
   });
 });
 
@@ -3183,14 +3613,54 @@ function newerVersionError(v: number): Error {
   return new Error(`This file was made by a newer version of the app (schema ${v}).`);
 }
 
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
+const isInt = (v: unknown): v is number => Number.isInteger(v);
+const isStringState = (v: unknown) => v === null || v === 'x' || (isInt(v) && v >= 0);
+const isPlacement = (v: unknown) => isObj(v) && isInt(v.course) && isInt(v.fret);
+const isTuning = (v: unknown) =>
+  isObj(v) && typeof v.id === 'string' && typeof v.name === 'string' &&
+  Array.isArray(v.courses) && v.courses.length > 0 && v.courses.every(isInt) && isInt(v.frettedCourses);
+const isEvent = (v: unknown) =>
+  isObj(v) &&
+  (v.kind === 'bar' || v.kind === 'break' ||
+    (v.kind === 'col' && isObj(v.col) && typeof v.col.x === 'number' && Array.isArray(v.col.notes) &&
+      v.col.notes.every((n) => isObj(n) && isInt(n.string) && isInt(n.fret))));
+const isChord = (v: unknown) =>
+  isObj(v) && typeof v.name === 'string' && isInt(v.baseFret) && Array.isArray(v.frets) && v.frets.length === 6 && v.frets.every(isStringState);
+const isRecordOf = (v: unknown, ok: (x: unknown) => boolean) => isObj(v) && Object.values(v).every(ok);
+
+/** Checks the whole structure, so data that parses but has the wrong shape never reaches the converter. */
+function invalidField(r: Obj): string | null {
+  if (typeof r.id !== 'string') return 'id';
+  if (typeof r.title !== 'string') return 'title';
+  const g = r.guitar;
+  if (!isObj(g)) return 'guitar';
+  if (!isTuning(g.tuning)) return 'guitar.tuning';
+  if (!isInt(g.capo) || g.capo < 0) return 'guitar.capo';
+  if (!Array.isArray(g.chords) || !g.chords.every(isChord)) return 'guitar.chords';
+  if (!Array.isArray(g.tab) || !g.tab.every(isEvent)) return 'guitar.tab';
+  const l = r.lute;
+  if (!isObj(l)) return 'lute';
+  if (!isTuning(l.tuning)) return 'lute.tuning';
+  for (const k of ['transpose', 'maxFret', 'maxStretch']) if (!isInt(l[k])) return `lute.${k}`;
+  if (!['french', 'italian', 'modern'].includes(l.notation as string)) return 'lute.notation';
+  const o = r.overrides;
+  if (!isObj(o)) return 'overrides';
+  if (!isRecordOf(o.chordVoicing, isInt)) return 'overrides.chordVoicing';
+  if (!isRecordOf(o.chordPins, (x) => isRecordOf(x, isPlacement))) return 'overrides.chordPins';
+  if (!isRecordOf(o.tabPins, (x) => isRecordOf(x, isPlacement))) return 'overrides.tabPins';
+  return null;
+}
+
 /** Validate and upgrade stored/imported data. Add migration steps here when SCHEMA_VERSION increases. */
 export function migrate(raw: unknown): Piece {
-  if (!raw || typeof raw !== 'object') throw new Error('Not a piece file.');
-  const r = raw as Record<string, unknown>;
-  const v = r.schemaVersion;
+  if (!isObj(raw)) throw new Error('Not a piece file.');
+  const v = raw.schemaVersion;
   if (typeof v === 'number' && v > SCHEMA_VERSION) throw newerVersionError(v);
   if (v !== SCHEMA_VERSION) throw new Error('Missing or unknown schemaVersion.');
-  if (typeof r.id !== 'string' || !r.guitar || !r.lute || !r.overrides) throw new Error('Invalid piece.');
+  const bad = invalidField(raw);
+  if (bad) throw new Error(`Invalid piece (${bad}).`);
   return raw as unknown as Piece;
 }
 
@@ -3310,6 +3780,7 @@ describe('looksLikeNotationPdf', () => {
   it('flags digits without dash runs', () => {
     expect(looksLikeNotationPdf('0 2 3\n5 7')).toBe(true);
     expect(looksLikeNotationPdf('e|---0---|')).toBe(false);
+    expect(looksLikeNotationPdf('e|\u2013\u2013\u20130\u2014\u2014\u2014|')).toBe(false);
   });
 });
 ```
@@ -3322,6 +3793,7 @@ Expected: FAIL — module not found.
 - [ ] **Step 3: Implement `src/import/pdfText.ts`**
 
 ```ts
+import { normalizeTabText } from '../core/parse/normalize';
 export interface PdfTextItem { str: string; x: number; y: number; width: number; height: number; fontName: string; }
 
 export const NOTATION_PDF_MESSAGE =
@@ -3398,8 +3870,10 @@ export function reconstructText(pages: PdfTextItem[][]): string {
   return out.join('\n');
 }
 
+/** Numbers but no dash runs, even after PDF dashes (– — −) are normalised: drawn staff lines, not text tab. */
 export function looksLikeNotationPdf(text: string): boolean {
-  return /\d/.test(text) && !/-{3,}/.test(text);
+  const t = normalizeTabText(text);
+  return /\d/.test(t) && !/-{3,}/.test(t);
 }
 ```
 
@@ -3568,7 +4042,7 @@ export class Player {
     if (!b) {
       const data = karplusStrong(midiToFreq(m), ctx.sampleRate, 2.5);
       b = ctx.createBuffer(1, data.length, ctx.sampleRate);
-      b.copyToChannel(data, 0);
+      b.getChannelData(0).set(data);
       this.cache.set(m, b);
     }
     return b;
@@ -3900,6 +4374,14 @@ describe('state helpers', () => {
     s.setItem('g2l:piece:bad', 'garbage');
     expect(safeLoad(store, 'bad')).toBeNull();
     expect(initialPiece(store).id).toBe(good.id);
+  });
+  it('skips a stored piece that is valid JSON but the wrong shape', () => {
+    const s = new MemoryStorage();
+    const store = new PieceStore(s);
+    s.setItem('g2l:index', JSON.stringify([{ id: 'bad', title: 'Bad', updatedAt: '' }]));
+    s.setItem('g2l:piece:bad', JSON.stringify({ ...newPiece(), id: 'bad', guitar: {} }));
+    expect(safeLoad(store, 'bad')).toBeNull();
+    expect(initialPiece(store).title).toBe('Untitled');
   });
 });
 
@@ -4798,6 +5280,7 @@ import { newPiece } from '../../src/core/piece';
 import { parseAsciiTab } from '../../src/core/parse/asciiTab';
 import { findPreset } from '../../src/core/tunings';
 import { AM_ARPEGGIO } from '../core/parse/fixtures';
+import type { LuteNote, LuteResult, Notation, Tuning } from '../../src/core/model';
 
 const six = findPreset('lute-6-g')!;
 
@@ -4849,6 +5332,37 @@ describe('LuteTabView', () => {
   it('shows an empty state', () => {
     expect(html(<LuteTabView result={convertPiece(newPiece())} tuning={six} notation="french" playing={null} onCycle={noop} />)).toContain('No tab yet');
   });
+});
+
+/** One note on every course (fret 2 on fretted courses, open on diapasons), as a chord and as a tab run. */
+function everyCourse(t: Tuning): LuteResult {
+  const notes: LuteNote[] = t.courses.map((open, course) => {
+    const fret = course < t.frettedCourses ? 2 : 0;
+    return { placement: { course, fret }, pitch: open + fret, shifted: 0, pinned: false, srcNoteIndex: course };
+  });
+  return {
+    chords: [{ name: 'G', chosen: 0, voicings: [{ notes, dropped: [], cost: 0 }] }],
+    tab: [...notes.map((n, i) => ({ kind: 'col' as const, index: i, x: i * 3, notes: [n], dropped: [] })), { kind: 'bar' }, { kind: 'break' }],
+    warnings: [],
+    totalCost: 0,
+    stats: { shifted: 0, dropped: 0 },
+    flats: false,
+  };
+}
+
+describe('SVG snapshots', () => {
+  const presets = ['lute-6-g', 'lute-7-g', 'lute-8-g', 'lute-10-g', 'lute-13-baroque-dm'];
+  const notations: Notation[] = ['french', 'italian', 'modern'];
+  for (const notation of notations) {
+    for (const id of presets) {
+      it(`${notation}, ${id}`, () => {
+        const t = findPreset(id)!;
+        const r = everyCourse(t);
+        expect(html(<LuteChordBox chord={r.chords[0]} tuning={t} notation={notation} flats={false} onCycle={noop} onVoicing={noop} onPlay={noop} />)).toMatchSnapshot();
+        expect(html(<LuteTabView result={r} tuning={t} notation={notation} playing={null} onCycle={noop} />)).toMatchSnapshot();
+      });
+    }
+  }
 });
 ```
 
@@ -5053,7 +5567,7 @@ export function LuteTabView({ result, tuning, notation, playing, onCycle, width 
 - [ ] **Step 5: Run tests and typecheck**
 
 Run: `npx vitest run tests/ui && npm run typecheck`
-Expected: PASS.
+Expected: PASS. The first run writes `tests/ui/__snapshots__/lute.test.tsx.snap` (30 snapshots: French, Italian and modern × 6, 7, 8, 10 and 13 courses). Before committing it, check a few by eye: paste the French 10-course and Italian 13-course tab SVGs into a blank HTML page and confirm the diapason marks sit below (French) or above (Italian) the staff without overlapping the next system. Do not run this step with `CI` set, because Vitest will not write new snapshots in CI mode.
 
 - [ ] **Step 6: Commit**
 
@@ -5073,9 +5587,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Test: `tests/ui/luteView.test.tsx`
 
 **Interfaces:**
-- Consumes: `LUTE_PRESETS`, `findPreset`, `addBassCourse`, `removeBassCourse`, `setCoursePitch`, `setFrettedCourses` (Task 3), `pitchClass`, `octaveOf`, `pcName`, `prettyName` (Task 2), `limitsOf`, `nextPlacement` (Task 11), `autoTranspose` (Task 11), edit helpers (Task 12), `LuteChordBox`, `LuteTabView` (Task 21), `WarningsPanel` (Task 18), `clampInt` (Task 18).
+- Consumes: `LUTE_PRESETS`, `findPreset`, `addBassCourse`, `removeBassCourse`, `setCoursePitch`, `setFrettedCourses` (Task 3), `pitchClass`, `octaveOf`, `pcName`, `prettyName` (Task 2), `limitsOf`, `cycleNote` (Task 11), `autoTranspose` (Task 11), edit helpers incl. `pinTabColumn`, `pinChord` (Task 12), `LuteChordBox`, `LuteTabView` (Task 21), `WarningsPanel` (Task 18), `clampInt` (Task 18).
 - Produces: `LuteSettingsBar({ settings, hasOverrides, onChange(patch), onEditTuning, onAuto, onClearOverrides })` with test ids `lute-settings`, `lute-tuning`, `transpose`, `auto-transpose`, `notation`; `TuningEditor({ tuning, onChange, onClose })` with test id `tuning-editor`; `LuteView({ piece, update, result, playing, onPlayChord })`.
-- Behaviour: clicking a lute note pins `nextPlacement(note.pitch - note.shifted, note.placement, limits)` (tab: `setTabPin`; chords: `setChordPin`); ◀/▶ on a chord calls `setChordVoicing`; "+3 guitar shapes" sets transpose 3; "Auto" sets `autoTranspose(piece)`.
+- Behaviour: clicking a lute note applies `cycleNote(shownNotes, noteIndex, limits)`: the clicked note moves to its next placement that fits beside the others, and every shown note is pinned where it is (tab: `pinTabColumn`; chords: `pinChord`, which also resets the chosen voicing); ◀/▶ on a chord calls `setChordVoicing`; "+3 guitar shapes" sets transpose 3; "Auto" sets `autoTranspose(piece)`.
 
 - [ ] **Step 1: Write the failing test `tests/ui/luteView.test.tsx`**
 
@@ -5276,9 +5790,9 @@ export function TuningEditor({ tuning, onChange, onClose }: TuningEditorProps) {
 ```tsx
 import { useEffect, useRef, useState } from 'react';
 import type { LuteColumn, LuteResult, Midi, Piece } from '../core/model';
-import { limitsOf, nextPlacement } from '../core/convert/convert';
+import { cycleNote, limitsOf } from '../core/convert/convert';
 import { autoTranspose } from '../core/convert/autoTranspose';
-import { clearOverrides, setChordPin, setChordVoicing, setLuteSettings, setTabPin } from '../core/edit';
+import { clearOverrides, pinChord, pinTabColumn, setChordVoicing, setLuteSettings } from '../core/edit';
 import { LuteSettingsBar } from './LuteSettingsBar';
 import { TuningEditor } from './TuningEditor';
 import { LuteChordBox } from './LuteChordBox';
@@ -5312,15 +5826,13 @@ export function LuteView({ piece, update, result, playing, onPlayChord }: LuteVi
 
   const cycleTab = (colIndex: number, noteIndex: number) => {
     const col = result.tab.find((e): e is LuteColumn => e.kind === 'col' && e.index === colIndex);
-    const n = col?.notes.find((x) => x.srcNoteIndex === noteIndex);
-    if (!n) return;
-    update((p) => setTabPin(p, colIndex, noteIndex, nextPlacement(n.pitch - n.shifted, n.placement, limits)));
+    const pins = col && cycleNote(col.notes, noteIndex, limits);
+    if (pins) update((p) => pinTabColumn(p, colIndex, pins));
   };
   const cycleChord = (chordIndex: number, noteIndex: number) => {
     const c = result.chords[chordIndex];
-    const n = c?.voicings[c.chosen]?.notes.find((x) => x.srcNoteIndex === noteIndex);
-    if (!n) return;
-    update((p) => setChordPin(p, chordIndex, noteIndex, nextPlacement(n.pitch - n.shifted, n.placement, limits)));
+    const pins = c?.voicings[c.chosen] && cycleNote(c.voicings[c.chosen].notes, noteIndex, limits);
+    if (pins) update((p) => pinChord(p, chordIndex, pins));
   };
 
   return (
@@ -5382,11 +5894,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 23: App assembly, playback, exports and styling
 
 **Files:**
-- Modify: `src/ui/App.tsx` (full rewrite), `src/styles.css` (full rewrite), `tests/ui/App.test.tsx` (rewrite)
+- Create: `src/ui/ErrorBoundary.tsx`
+- Modify: `src/ui/App.tsx` (full rewrite), `src/styles.css` (full rewrite), `src/main.tsx` (wrap `App` in `ErrorBoundary`), `tests/ui/App.test.tsx` (rewrite)
 
 **Interfaces:**
 - Consumes: everything from Tasks 11–22 (`usePieces`, `browserStorage`, `convertPiece`, `guitarColumns`, `preferFlats`, `toTabCode`, `exportPieces`, `importPieces`, `setTitle`, `Player`, `stepsFromColumns`, `Header`, `PieceList`, `GuitarView`, `LuteView`, `downloadText`, `slug`, `svgMarkup`, `combineSvgs`).
-- Produces: `App({ storage?: StorageLike })`.
+- Produces: `App({ storage?: StorageLike })`, `ErrorBoundary` (React class component; on a render error shows the message, "Download saved data" for every `g2l:` localStorage key, and "Reload").
 - Behaviour: one `Player`; "Play tab" plays the guitar columns in Guitar view and the converted lute columns in Lute view, highlighting the current lute column; exports per spec §9; the print view shows the piece title plus the current view's chord boxes and tab.
 
 - [ ] **Step 1: Rewrite the failing test `tests/ui/App.test.tsx`**
@@ -5395,8 +5908,21 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 import { describe, it, expect } from 'vitest';
 import { html } from './render';
 import { App } from '../../src/ui/App';
+import { ErrorBoundary } from '../../src/ui/ErrorBoundary';
 import { MemoryStorage, PieceStore } from '../../src/core/storage';
 import { newPiece } from '../../src/core/piece';
+
+describe('ErrorBoundary', () => {
+  it('shows a recovery screen instead of a blank page', () => {
+    // Server rendering does not run error boundaries, so drive the component directly.
+    const b = new ErrorBoundary({ children: null });
+    b.state = ErrorBoundary.getDerivedStateFromError(new Error('boom'));
+    const out = html(<>{b.render()}</>);
+    expect(out).toContain('Something went wrong');
+    expect(out).toContain('boom');
+    expect(out).toContain('Download saved data');
+  });
+});
 
 describe('App', () => {
   it('starts with a new untitled piece in the guitar view', () => {
@@ -5416,7 +5942,7 @@ describe('App', () => {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `npx vitest run tests/ui/App.test.tsx`
-Expected: FAIL — the scaffold `App` ignores `storage` and has no `add-chord`.
+Expected: FAIL — `ErrorBoundary` does not exist yet, and the scaffold `App` ignores `storage` and has no `add-chord`.
 
 - [ ] **Step 3: Rewrite `src/ui/App.tsx`**
 
@@ -5690,14 +6216,83 @@ input[type='number'] { width: 4.5em; }
   .tab-wrap { overflow: visible; }
   .chord-name { border: none; }
 }
+.crash { max-width: 40rem; margin: 3rem auto; padding: 0 16px; }
 ```
 
-- [ ] **Step 5: Run all unit tests, typecheck and build**
+- [ ] **Step 5: Create `src/ui/ErrorBoundary.tsx`**
+
+A last resort for bugs: stored data is already validated by `migrate` (Task 14), but a blank page would hide the user's pieces.
+
+`src/ui/ErrorBoundary.tsx`:
+```tsx
+import { Component, type ReactNode } from 'react';
+import { downloadText } from './util';
+
+interface State { error: Error | null; }
+
+/** Last-resort screen: a bug never leaves a blank page, and saved pieces can always be downloaded. */
+export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
+  state: State = { error: null };
+
+  static getDerivedStateFromError(error: Error): State {
+    return { error };
+  }
+
+  private exportRaw = () => {
+    const data: Record<string, string> = {};
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k?.startsWith('g2l:')) data[k] = localStorage.getItem(k) ?? '';
+      }
+    } catch {
+      // storage unavailable: download what we have (nothing)
+    }
+    downloadText('guitar-to-lute-saved-data.json', JSON.stringify(data, null, 2), 'application/json');
+  };
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <main className="crash" role="alert">
+        <h1>Something went wrong</h1>
+        <p>{this.state.error.message}</p>
+        <p>Your saved pieces are still in this browser. Download a copy before reloading.</p>
+        <button type="button" onClick={this.exportRaw}>Download saved data</button>{' '}
+        <button type="button" onClick={() => location.reload()}>Reload</button>
+      </main>
+    );
+  }
+}
+```
+
+- [ ] **Step 6: Rewrite `src/main.tsx` to use it**
+
+```tsx
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { registerSW } from 'virtual:pwa-register';
+import { App } from './ui/App';
+import { ErrorBoundary } from './ui/ErrorBoundary';
+import './styles.css';
+
+registerSW({ immediate: true });
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  </StrictMode>,
+);
+```
+
+- [ ] **Step 7: Run all unit tests, typecheck and build**
 
 Run: `npm test && npm run typecheck && npm run build`
 Expected: all tests PASS; build succeeds.
 
-- [ ] **Step 6: Manual check in the browser**
+- [ ] **Step 8: Manual check in the browser**
 
 Run: `npm run dev` and open the printed URL. Check:
 1. Add a chord box; click strings/frets to make Am (x 0 2 2 1 0); the name placeholder shows "Am" and notes "A E A C E".
@@ -5708,10 +6303,10 @@ Run: `npm run dev` and open the printed URL. Check:
 6. Export JSON, TabCode, tab SVG, chords SVG; open the SVGs in the browser and check they are visible on a white background.
 7. Narrow the window to phone width (≈375 px): no horizontal page scroll; the ☰ button opens the piece list.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add src/ui/App.tsx src/styles.css tests/ui/App.test.tsx
+git add src/ui/App.tsx src/ui/ErrorBoundary.tsx src/main.tsx src/styles.css tests/ui/App.test.tsx
 git commit -m "feat(ui): assemble app with playback, exports, styling and print view
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"

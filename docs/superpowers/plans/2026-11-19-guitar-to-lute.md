@@ -21,7 +21,7 @@
 - French fret letters: a b c d e f g h i k l m n (no `j`). Italian: 0–9, `X` for 10.
 - Playability: fret span ≤ `maxStretch`; at most 4 stopping fingers (a barré counts as one); courses ≥ `frettedCourses` are open-only.
 - Tab DP keeps the top K = 8 candidates per column; chord boxes return up to 3 voicings.
-- Candidate enumeration visits at most 5000 assignments per search (`ENUMERATION_CAP`) and prunes branches that cannot beat the current K-th best (branch-and-bound). This replaces the spec's "200 candidates" cap with a bound on work done; ranking still keeps only the best K.
+- Candidate enumeration visits at most 5000 assignments per search (`ENUMERATION_CAP`) and prunes branches that cannot beat the current K-th best (branch-and-bound). Ranking keeps only the best K (spec §6.2).
 - A column that does not fit as written may move notes by octaves and drop notes; the cheapest result wins. Drop penalties follow the musical role (duplicate 4 < octave doubling 7 < inner voice 10 < top 16 < bass 20 < pinned 30) against a shift penalty of 5, and an octave shift into unison with another note is never allowed.
 - Stored/exported JSON carries `schemaVersion: 1`.
 - Workbox `maximumFileSizeToCacheInBytes` = 5 MB.

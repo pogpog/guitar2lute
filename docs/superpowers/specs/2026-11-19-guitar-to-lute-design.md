@@ -158,7 +158,7 @@ All glyph mappings live in one table in `notation.ts` so period letter forms (e.
 - **Lute chord boxes:** vertical diagram with one line per fretted course; diapasons used by the chord shown underneath using the selected notation's diapason symbols.
 
 ### 4.4 Note and chord naming
-`pitch.ts` spells notes by key: after transposition, choose sharps or flats by the most likely key (from the detected key of the whole piece, falling back to flats, which suit lute repertoire). Chord names are detected with tonal's `Chord.detect` (first result) and transposed with the piece; user-entered names are transposed with `Chord.transpose`.
+`pitch.ts` spells notes by key: after transposition, choose sharps or flats by the most likely key (from the detected key of the whole piece, falling back to flats, which suit lute repertoire). Chord names are detected with tonal's `Chord.detect` (first result) and transposed with the piece; user-entered names are transposed with `Chord.transpose` by capo + transpose, so a typed name always matches the sounding chord (a box named "D" played with capo 2 is shown as E).
 
 ## 5. Guitar input
 
@@ -205,7 +205,7 @@ Guitar note pitch = `tuning.courses[string] + capo + fret`. Target pitch = guita
 
 ### 6.2 Candidate placements (`candidates.ts`)
 For a pitch `p` and lute course `c`: fret `f = p − open(c)`; valid if `0 ≤ f ≤ maxFret` and (`c < frettedCourses` or `f = 0`).
-For a set of pitches (a chord or tab column): enumerate assignments of each pitch to a distinct course (backtracking), keeping only playable ones (§6.3). Cap enumeration at 200 candidates per column, keeping the best by placement cost.
+For a set of pitches (a chord or tab column): enumerate assignments of each pitch to a distinct course (backtracking), keeping only playable ones (§6.3). Each search visits at most 5000 assignments and uses branch-and-bound: a branch is abandoned as soon as its lowest possible cost cannot beat the current K-th best candidate. Only the best K candidates are kept.
 
 ### 6.3 Playability (`playability.ts`)
 For the stopped notes (fret > 0):
@@ -214,13 +214,16 @@ For the stopped notes (fret > 0):
 - Fingers needed = stopped notes not covered by the barré + (barré ? 1 : 0) ≤ 4.
 
 ### 6.4 Unplaceable notes, octave shifts and dropping
-If a column has no playable assignment:
-1. **Octave-shift** offending pitches toward the lute's range: below the lowest available pitch → +12 (repeat up to twice); above the highest → −12. A bass pitch matching a diapason exactly is always tried before shifting (this happens naturally because diapasons are candidates).
-2. If the column still has no playable assignment, or has more pitches than courses, **drop** notes in this order: duplicate identical pitches; octave doublings of a pitch class (never the bass or top note); inner voices from the middle outward. The bass and top (melody) notes are kept as long as possible.
-3. Every shifted note carries `shifted: ±12` and every dropped note is recorded; shifting the bass is flagged separately as "inversion changed".
+Conversion runs in two passes.
+1. **As written:** every note at its own pitch. A note with no placement at all on the lute (outside its range) takes its nearest octave that has one. A bass pitch matching a diapason exactly needs no shift, because diapasons are candidates.
+2. **Only if pass 1 finds nothing playable:** each note may also move by an octave (0, +12, −12, +24, −24), and notes may be dropped. Every combination of shifts and drops is costed (§6.5), and the cheapest result wins. Shifts and drops therefore compete on cost rather than following a fixed "shift first, then drop" order.
+   - Drop penalties follow the note's musical role, taken from the input pitches (a shift never changes which note is the bass or top): an exact duplicate of another kept note 4; an octave doubling of another kept note's pitch class 7; an inner voice 10; the top (melody) note 16; the bass 20; a pinned note 30. Each octave-shifted note costs 5.
+   - So dropping an exact duplicate (4) is preferred to shifting it (5), while an octave doubling is shifted rather than dropped when a shift fits (5 < 7), and the bass and top note are kept as long as possible.
+   - An octave shift that lands in unison with another note is not allowed (it would be a drop in disguise).
+3. Every shifted note carries `shifted: ±12/±24` and every dropped note is recorded. If the lowest output note's pitch class differs from the input bass's (and the bass shift has not already been reported), the change is flagged as "inversion changed".
 
 ### 6.5 Costs (`cost.ts`)
-- **Placement cost** of a candidate: Σ stopped fret × 1.0 + span × 1.5 + fingers × 0.5 − open strings × 0.3 + shifted notes × 5 + dropped notes × 10 + (lowest stopped fret above 5) × 1.0.
+- **Placement cost** of a candidate: Σ stopped fret × 1.0 + span × 1.5 + fingers × 0.5 − open strings × 0.3 + shifted notes × 5 + Σ drop penalties by role (§6.4) + (lowest stopped fret above 5) × 1.0.
 - **Transition cost** between consecutive columns: |hand position − previous hand position| × 1.0, where hand position = lowest stopped fret (an all-open column keeps the previous position); + 0.5 if a new note reuses the course that held the previous column's bass (keeps a held bass ringing, since no durations are known).
 - Weights live in one exported constant and are tuned against test fixtures.
 
@@ -228,11 +231,13 @@ If a column has no playable assignment:
 Keep the top K = 8 candidates per column by placement cost (always including any candidate that satisfies the column's pins). Viterbi over the columns minimises Σ placement + Σ transition. Bar and break events do not reset the hand position. Ties are broken deterministically (lower total placement cost, then lexicographic course list).
 
 ### 6.7 Chord boxes
-Each chord is converted independently with the same candidate generation and placement cost; the top 3 distinct voicings are returned, ranked. The chosen voicing defaults to rank 1; `overrides.chordVoicing` selects another.
+Each chord is converted independently with the same candidate generation and placement cost; the top 3 distinct voicings are returned, ranked. When the whole chord fits, versions that leave out one doubled note (never the bass, top or a pinned note) are also offered, ranked after every full-chord voicing, so a full six-note chord still has alternatives. The chosen voicing defaults to rank 1; `overrides.chordVoicing` selects another.
 
 ### 6.8 Manual override
-- Clicking a note in the lute tab or a lute chord box cycles it through its other valid placements (course/fret) for the same pitch (and its octave shifts, marked).
-- The chosen placement is stored as a pin. Pins are hard constraints: candidates that violate them are discarded, and the DP is re-run so neighbouring columns adapt.
+- Clicking a note in the lute tab or a lute chord box moves it to its next valid placement (course/fret) for the same pitch or one of its octave shifts (marked). Only placements that fit beside the other notes shown are offered: a free course, no unison with another note, and a playable shape. Clicking never drops or moves another note.
+- The click pins the **whole shape shown** for that column or chord: the clicked note's new placement plus every other note's current placement. This stops the rest of the chord from re-arranging itself around the moved note. Every note in the shape then shows the pinned underline, and after a tuning change each pin that no longer fits gives its own warning.
+- Pinning a chord clears its `chordVoicing` choice; choosing another voicing with ◀ ▶ clears the chord's pins (so ◀ ▶ stay usable on a pinned chord).
+- Pins are stored per note. Pins are hard constraints: candidates that violate them are discarded, and the DP is re-run so neighbouring columns adapt.
 - A pin that becomes impossible (e.g. after a tuning change) is dropped with a warning.
 - "Clear overrides" resets all pins for the piece.
 
@@ -281,7 +286,7 @@ interface LuteResult { chords: LuteChord[]; tab: (LuteColumn | {kind:'bar'} | {k
 | Unparseable tab lines | Warning with line number; the rest imports |
 | Non-6-string block | Warning; block skipped |
 | PDF without text / notation-software PDF | Specific error message; extracted text placed in paste box |
-| Unplaceable note | Octave-shift (flagged), then drop (flagged) |
+| Unplaceable note | Octave-shift or drop, whichever costs less (§6.4); both flagged |
 | Impossible pin | Pin removed, warning |
 | Storage quota | Banner; export still available |
 

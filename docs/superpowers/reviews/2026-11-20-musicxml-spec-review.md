@@ -393,3 +393,13 @@ Adopts every earlier item. New problems found and how the spec (af23076) answers
 3. **`<transpose>` ignored** by the pitch check and by "missing tuning from pitches" (an octave-transposing guitar part would warn wrongly, or give a tuning an octave high); capo possibly double-counted. → Sounding pitch applies `<transpose>` first; notice when a pitch-derived tuning may include the capo; fixture.
 
 Smaller: XML decoded with its declared encoding (ISO-8859-1), plain text capped at 1 MB; continuous blocks defined (longest line; `|` on 4+ of 6 lines; parser change, old pieces keep the pause until re-imported); exact gap counting for the scale (threshold 5%, sample's 16ths are 11–13%); single-column default scale; `<tied type="continue">`; "Capo at fret 3"; out-of-date text in §1, §2 (sniff comment, ui/ file list) and §11; default speed ≈ 42 bpm noted.
+
+---
+
+# Third pass (on revision af23076)
+
+1. **Placement formula contradicted "at least one dash"** (`1-12` parsed as 1 and 12). → A column goes at least 2 characters after the previous column's last digit; `|` may follow a digit directly, and a column may follow `|` directly.
+2. **UTF-8 BOM before `<?xml` would send MusicXML to the paste box as raw text.** → BOM skipped before the root-element scan; sniff test added.
+3. **125-character cap slightly too high** (2/4 with 16ths, 5 bars → 39 lute columns + 1 alone; each barline adds 10 px). → Block width measured with the lute layout's own spacing rule, via a function exported from `luteTabLayout.ts`.
+
+Minor, also adopted: `<transpose number>` per staff; `<staff-tuning>`-is-sounding marked unconfirmed (pitch check would show −12); Windows-1252 fallback for plain text; capo words separated by spaces or punctuation; §2 core/ and import/ file lists completed.

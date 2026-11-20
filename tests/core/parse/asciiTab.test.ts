@@ -58,6 +58,13 @@ describe('parseAsciiTab', () => {
     ]);
   });
 
+  it('aligns a line whose leading barline is a space', () => {
+    const text = ['e|---0---|', 'B ---1---|', 'G|---0---|', 'D|---2---|', 'A|---3---|', 'E|-------|'].join('\n');
+    expect(cols(parseAsciiTab(text).events)).toEqual([
+      [{ string: 0, fret: 0 }, { string: 1, fret: 1 }, { string: 2, fret: 0 }, { string: 3, fret: 2 }, { string: 4, fret: 3 }],
+    ]);
+  });
+
   it('handles repeat marks and trailing repeat counts', () => {
     const r = parseAsciiTab(F.REPEATS);
     expect(r.events.map((e) => e.kind)).toEqual(['col', 'bar', 'break']);

@@ -4,7 +4,15 @@ import { parsePitchClass } from '../pitch';
 
 export interface AsciiParseResult { events: TabEvent[]; warnings: Warning[]; labels: number[] | null; }
 
-interface LineInfo { index: number; label: string | null; body: string; origin: number; isTab: boolean; }
+interface LineInfo {
+  index: number;
+  label: string | null;
+  body: string;
+  origin: number;
+  isTab: boolean;
+  /** the character just before the body is a space (where other lines may have their barline) */
+  spaceBefore: boolean;
+}
 interface Token { string: number; start: number; end: number; fret: number; }
 
 const LABEL_RE = /^\s*([A-Ga-g][#b]?)\s*(?=[|:\-])/;
@@ -21,7 +29,7 @@ function analyzeLine(text: string, index: number): LineInfo {
     if (c === '|' || c === '-' || c === ':') { origin = i; break; }
     if (c !== ' ') break;
   }
-  if (origin < 0) return { index, label, body: '', origin: 0, isTab: false };
+  if (origin < 0) return { index, label, body: '', origin: 0, isTab: false, spaceBefore: false };
   let body = text.slice(origin).replace(/\s+$/, '');
   // Text after the last barline ("|  let ring", "|PM", "| Am") is an annotation, not tab.
   const lastBar = body.lastIndexOf('|');
@@ -35,7 +43,14 @@ function analyzeLine(text: string, index: number): LineInfo {
     if (c === '-') dashes++;
   }
   const isTab = body.length >= 4 && dashes >= 3 && tabChars / body.length >= 0.6;
-  return { index, label, body, origin, isTab };
+  return { index, label, body, origin, isTab, spaceBefore: origin > 0 && text[origin - 1] === ' ' };
+}
+
+/** When most lines of a block start with a barline, a line that has a space there instead lines up as if it had one. */
+function alignLeadingBars(block: LineInfo[]): LineInfo[] {
+  const barLed = block.filter((l) => l.body.startsWith('|')).length;
+  if (barLed * 2 <= block.length) return block;
+  return block.map((l) => (!l.body.startsWith('|') && l.spaceBefore ? { ...l, body: `|${l.body}`, origin: l.origin - 1 } : l));
 }
 
 /** Lines like "|--1--2--3--|" that only count beats. */
@@ -82,7 +97,8 @@ function blocksFromRun(run: LineInfo[]): { blocks: LineInfo[][]; skipped: LineIn
   return { blocks, skipped };
 }
 
-function parseBlock(block: LineInfo[], xOffset: number): { events: TabEvent[]; width: number; warnings: Warning[] } {
+function parseBlock(lines: LineInfo[], xOffset: number): { events: TabEvent[]; width: number; warnings: Warning[] } {
+  const block = alignLeadingBars(lines);
   const warnings: Warning[] = [];
   const tokens: Token[] = [];
   const barCounts = new Map<number, number>();

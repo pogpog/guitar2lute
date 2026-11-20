@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MAX_TEXT_BYTES, sniff, xmlRootName } from '../../src/import/sniff';
 
 const enc = new TextEncoder();
@@ -91,6 +91,34 @@ describe('sniff on large input', () => {
       if (head !== comment) expect(s.kind === 'musicxml' && s.text).toContain('Café');
     }
     expect(sniff(bytes(comment, '<score-timewise/>'))).toEqual({ kind: 'timewise' });
+  });
+  it('reads a root tag straddling the end of the prefix', () => {
+    const P = 64 * 1024;
+    for (const before of [3, 5, 6, 12, 16, 40]) {
+      const pad = (n: number) => '<!--' + 'x'.repeat(n - 7) + '-->';
+      // Latin-1: root tag starts `before` bytes before the 64 KB mark.
+      const l = sniff(bytes(pad(P - before), '<score-partwise/>'));
+      expect(l.kind, `latin1 ${before}`).toBe('musicxml');
+      // UTF-16: `before` characters (the prefix is 32K characters).
+      const u = sniff(Uint8Array.from(utf16(pad(P / 2 - before) + '<score-partwise/>', true)));
+      expect(u.kind, `utf16 ${before}`).toBe('musicxml');
+    }
+  });
+  it('never decodes more than the prefix of a large non-XML buffer', () => {
+    const spy = vi.spyOn(TextDecoder.prototype, 'decode');
+    try {
+      const plain = new Uint8Array(5 * 1024 * 1024).fill(0x61);
+      const angle = new Uint8Array(5 * 1024 * 1024).fill(0x61);
+      angle.set(enc.encode('<12>'));
+      expect(sniff(plain)).toEqual({ kind: 'unknown' });
+      expect(sniff(angle)).toEqual({ kind: 'unknown' });
+      for (const call of spy.mock.calls) {
+        expect((call[0] as Uint8Array).byteLength).toBeLessThanOrEqual(64 * 1024);
+      }
+      expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
   it('finds a UTF-16 root after a long prologue', () => {
     const s = sniff(Uint8Array.from(utf16('<!--' + 'x'.repeat(100 * 1024) + '-->' + SCORE, true)));

@@ -26,21 +26,23 @@ function decode(label: string, bytes: Uint8Array): string {
   }
 }
 
-// Name of the first tag after whitespace, the XML declaration, comments,
-// processing instructions and a DOCTYPE; null if there is none.
-export function xmlRootName(text: string): string | null {
+// Root name, null if the text is not XML, or 'more' if the text ends before
+// the root tag's name is complete (so a longer prefix could change the answer).
+function scanXmlRoot(text: string): string | null | 'more' {
   let i = 0;
   const n = text.length;
   for (;;) {
-    while (i < n && /\s|﻿/.test(text[i])) i++;
-    if (i >= n || text[i] !== '<') return null;
+    while (i < n && /\s|\uFEFF/.test(text[i])) i++;
+    if (i >= n) return 'more';
+    if (text[i] !== '<') return null;
+    if (i + 1 >= n) return 'more';
     if (text.startsWith('<?', i)) {
       const end = text.indexOf('?>', i + 2);
-      if (end < 0) return null;
+      if (end < 0) return 'more';
       i = end + 2;
     } else if (text.startsWith('<!--', i)) {
       const end = text.indexOf('-->', i + 4);
-      if (end < 0) return null;
+      if (end < 0) return 'more';
       i = end + 3;
     } else if (text.startsWith('<!', i)) {
       // DOCTYPE: ends at the first '>' outside quotes and an internal [subset].
@@ -56,13 +58,21 @@ export function xmlRootName(text: string): string | null {
         else if (c === ']') depth--;
         else if (c === '>' && depth <= 0) break;
       }
-      if (i >= n) return null;
+      if (i >= n) return 'more';
       i++;
     } else {
-      const m = /^<([A-Za-z_:][^\s/>]*)/.exec(text.slice(i, i + 256));
-      return m ? m[1] : null;
+      const m = /^<([A-Za-z_:][^\s/>]*)/.exec(text.slice(i, i + 1024));
+      if (!m) return text.length - i < 2 ? 'more' : null;
+      return i + m[0].length >= n ? 'more' : m[1];
     }
   }
+}
+
+// First tag after whitespace, the XML declaration, comments, processing
+// instructions and a DOCTYPE; null if there is none.
+export function xmlRootName(text: string): string | null {
+  const r = scanXmlRoot(text);
+  return r === 'more' ? null : r;
 }
 
 function classifyRoot(root: string, readText: () => string): Sniffed {
@@ -73,13 +83,14 @@ function classifyRoot(root: string, readText: () => string): Sniffed {
 
 const SCAN_PREFIX = 64 * 1024;
 
-// Root name found in a decoded prefix of `body`. The prefix grows only while
-// it ends inside a prologue that still looks like XML (starts with '<').
+// Root name found in a decoded prefix of `body`; the prefix grows only while
+// the scan ran out of text inside the prologue or the root tag's name.
 function scanRoot(body: Uint8Array, label: string): { root: string | null; head: string } {
   for (let len = SCAN_PREFIX; ; len *= 2) {
     const head = decode(label, body.subarray(0, len));
-    const root = xmlRootName(head);
-    if (root !== null || len >= body.length || !/^[\s\uFEFF]*</.test(head)) return { root, head };
+    const r = scanXmlRoot(head);
+    if (r !== 'more') return { root: r, head };
+    if (len >= body.length) return { root: null, head };
   }
 }
 

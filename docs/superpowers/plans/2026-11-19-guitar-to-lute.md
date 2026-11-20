@@ -5311,6 +5311,14 @@ describe('LuteChordBox', () => {
     const out = html(<LuteChordBox chord={chord} tuning={eight} notation="french" flats onCycle={noop} onVoicing={noop} onPlay={noop} />);
     expect(out).toContain('>/a</text>');
   });
+  it('keeps the voicing buttons usable on a pinned chord', () => {
+    const r = eChordAtPlus3();
+    const one = { ...r.chords[0], chosen: 0, voicings: [{ ...r.chords[0].voicings[0], notes: r.chords[0].voicings[0].notes.map((n) => ({ ...n, pinned: true })) }] };
+    const out = html(<LuteChordBox chord={one} tuning={six} notation="french" flats={false} onCycle={noop} onVoicing={noop} onPlay={noop} />);
+    expect(out).not.toMatch(/aria-label="(Previous|Next) voicing" disabled/);
+    const auto = { ...r.chords[0], chosen: 0, voicings: [r.chords[0].voicings[0]] };
+    expect(html(<LuteChordBox chord={auto} tuning={six} notation="french" flats={false} onCycle={noop} onVoicing={noop} onPlay={noop} />)).toMatch(/aria-label="Next voicing" disabled/);
+  });
   it('renders empty states', () => {
     const empty = { name: '', chosen: 0, voicings: [{ notes: [], dropped: [], cost: 0 }] };
     expect(() => html(<LuteChordBox chord={empty} tuning={six} notation="french" flats onCycle={noop} onVoicing={noop} onPlay={noop} />)).not.toThrow();
@@ -5395,12 +5403,14 @@ export interface LuteChordBoxProps {
 }
 
 export function LuteChordBox({ chord, tuning, notation, flats, onCycle, onVoicing, onPlay }: LuteChordBoxProps) {
+  // A clicked (pinned) chord has a single voicing; ◀/▶ stay enabled because choosing a voicing clears the pins.
+  const pinned = chord.voicings[chord.chosen]?.notes.some((n) => n.pinned) ?? false;
   const v = chord.voicings[chord.chosen];
   const controls = (
     <div className="box-controls">
-      <button type="button" aria-label="Previous voicing" disabled={chord.chosen <= 0} onClick={() => onVoicing(-1)}>◀</button>
+      <button type="button" aria-label="Previous voicing" disabled={!pinned && chord.chosen <= 0} onClick={() => onVoicing(-1)}>◀</button>
       <span>{`${chord.voicings.length ? chord.chosen + 1 : 0}/${chord.voicings.length}`}</span>
-      <button type="button" aria-label="Next voicing" disabled={chord.chosen >= chord.voicings.length - 1} onClick={() => onVoicing(1)}>▶</button>
+      <button type="button" aria-label="Next voicing" disabled={!pinned && chord.chosen >= chord.voicings.length - 1} onClick={() => onVoicing(1)}>▶</button>
       <button type="button" aria-label="Play chord" onClick={onPlay}>♪</button>
     </div>
   );

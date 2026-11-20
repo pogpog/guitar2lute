@@ -65,10 +65,22 @@ export function xmlRootName(text: string): string | null {
   }
 }
 
-function classifyRoot(root: string, text: string): Sniffed {
-  if (root === 'score-partwise') return { kind: 'musicxml', text };
+function classifyRoot(root: string, readText: () => string): Sniffed {
+  if (root === 'score-partwise') return { kind: 'musicxml', text: readText() };
   if (root === 'score-timewise') return { kind: 'timewise' };
   return { kind: 'unknown' };
+}
+
+const SCAN_PREFIX = 64 * 1024;
+
+// Root name found in a decoded prefix of `body`. The prefix grows only while
+// it ends inside a prologue that still looks like XML (starts with '<').
+function scanRoot(body: Uint8Array, label: string): { root: string | null; head: string } {
+  for (let len = SCAN_PREFIX; ; len *= 2) {
+    const head = decode(label, body.subarray(0, len));
+    const root = xmlRootName(head);
+    if (root !== null || len >= body.length || !/^[\s\uFEFF]*</.test(head)) return { root, head };
+  }
 }
 
 export function sniff(bytes: Uint8Array): Sniffed {
@@ -76,18 +88,17 @@ export function sniff(bytes: Uint8Array): Sniffed {
   if (bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 3 && bytes[3] === 4) return { kind: 'zip' };
 
   if (bytes.length >= 2 && ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff))) {
-    const text = decode(bytes[0] === 0xff ? 'utf-16le' : 'utf-16be', bytes);
-    const root = xmlRootName(text);
-    return root === null ? { kind: 'unknown' } : classifyRoot(root, text);
+    const label = bytes[0] === 0xff ? 'utf-16le' : 'utf-16be';
+    const { root } = scanRoot(bytes, label);
+    return root === null ? { kind: 'unknown' } : classifyRoot(root, () => decode(label, bytes));
   }
 
   const start = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0;
   const body = bytes.subarray(start);
-  const ascii = new TextDecoder('latin1').decode(body);
-  const root = xmlRootName(ascii);
+  const { root, head } = scanRoot(body, 'latin1');
   if (root !== null) {
-    const declared = /^\s*<\?xml[^>]*?\bencoding\s*=\s*["']([^"']+)["']/.exec(ascii.slice(0, 512));
-    return classifyRoot(root, decode(declared ? declared[1] : 'utf-8', body));
+    const declared = /^\s*<\?xml[^>]*?\bencoding\s*=\s*["']([^"']+)["']/.exec(head.slice(0, 512));
+    return classifyRoot(root, () => decode(declared ? declared[1] : 'utf-8', body));
   }
 
   if (bytes.length > MAX_TEXT_BYTES || bytes.includes(0)) return { kind: 'unknown' };

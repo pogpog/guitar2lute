@@ -79,6 +79,25 @@ describe('sniff', () => {
   });
 });
 
+describe('sniff on large input', () => {
+  it('classifies a multi-MB non-XML buffer', () => {
+    expect(sniff(new Uint8Array(5 * 1024 * 1024).fill(0x61))).toEqual({ kind: 'unknown' });
+  });
+  it('finds the root after a prologue longer than the scan prefix', () => {
+    const comment = '<!--' + 'x'.repeat(200 * 1024) + '-->';
+    for (const head of [comment, '<?xml version="1.0" encoding="ISO-8859-1"?>' + comment]) {
+      const s = sniff(bytes(head, '<score-partwise><work-title>Caf', [0xe9], '</work-title></score-partwise>'));
+      expect(s.kind).toBe('musicxml');
+      if (head !== comment) expect(s.kind === 'musicxml' && s.text).toContain('Café');
+    }
+    expect(sniff(bytes(comment, '<score-timewise/>'))).toEqual({ kind: 'timewise' });
+  });
+  it('finds a UTF-16 root after a long prologue', () => {
+    const s = sniff(Uint8Array.from(utf16('<!--' + 'x'.repeat(100 * 1024) + '-->' + SCORE, true)));
+    expect(s.kind).toBe('musicxml');
+  });
+});
+
 describe('xmlRootName', () => {
   it('skips declaration, comments, PIs and DOCTYPE with internal subset', () => {
     expect(xmlRootName('<?xml version="1.0"?>\n<!-- c -->\n<?pi x?>\n<!DOCTYPE a [<!ENTITY e "<b>">]>\n<a x="1"/>')).toBe('a');

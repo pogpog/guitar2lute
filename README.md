@@ -4,7 +4,7 @@ A web app that converts guitar chord boxes and guitar tab into lute chord boxes 
 
 ## Requirements
 
-- Node.js 20 or later (developed on Node 22) and npm
+- Node.js 22.12 or later, and npm
 
 ## Install
 

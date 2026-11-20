@@ -13,6 +13,17 @@ describe('WarningsPanel', () => {
     expect(out).toContain('1 warning');
     expect(out).toContain('Line 3: Bad line');
   });
+  it('offers to remove manual placements that no longer fit', () => {
+    const ws = [
+      { kind: 'pin' as const, message: 'Tab column 3: 2 manual placements no longer fit and are ignored.', tabColumn: 2 },
+      { kind: 'pin' as const, message: 'Chord 1: 1 manual placement no longer fits and is ignored.', chord: 0 },
+      { kind: 'drop' as const, message: 'Tab column 4: B2 dropped.', tabColumn: 3 },
+    ];
+    const out = html(<WarningsPanel warnings={ws} onRemovePins={noop} onRemoveAllStale={noop} />);
+    expect(out.match(/>Remove<\/button>/g)).toHaveLength(2);
+    expect(out).toContain('Remove all that no longer fit');
+    expect(html(<WarningsPanel warnings={ws} />)).not.toContain('Remove');
+  });
 });
 
 describe('PieceList', () => {

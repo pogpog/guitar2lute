@@ -153,6 +153,18 @@ describe('convertPiece — tab', () => {
     expect(() => convertPiece(p)).not.toThrow();
     expect(convertPiece(p).warnings.some((w) => w.kind === 'pin')).toBe(true);
   });
+  it('gives one warning per chord, however many of its pins no longer fit', () => {
+    const p = piece([E]);
+    p.lute.transpose = 3;
+    const shown = convertPiece(p).chords[0].voicings[0].notes;
+    p.overrides.chordPins = { 0: Object.fromEntries(shown.map((n) => [n.srcNoteIndex, n.placement])) };
+    p.lute.tuning = findPreset('lute-13-baroque-dm')!;
+    const pins = convertPiece(p).warnings.filter((w) => w.kind === 'pin');
+    expect(pins).toHaveLength(1);
+    expect(pins[0].chord).toBe(0);
+    // several of the chord's pins are stale (3 on this tuning), yet they give a single warning
+    expect(pins[0].message).toMatch(/: [2-6] manual placements no longer fit and are ignored\.$/);
+  });
   it('every output note equals input + transpose (± flagged octave shifts)', () => {
     const rand = mulberry32(42);
     const tunings = ['lute-6-g', 'lute-8-g', 'lute-10-g', 'lute-13-baroque-dm'];

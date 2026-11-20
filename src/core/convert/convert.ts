@@ -63,10 +63,11 @@ export function convertPiece(piece: Piece, transpose: number = piece.lute.transp
       }
     }
   };
+  /** One warning per chord or column: a click pins the whole shape, so its pins go stale together. */
   const reportPins = (bad: number[], where: string, extra: Partial<Warning>) => {
-    for (const i of bad) {
-      warnings.push({ kind: 'pin', message: `${where}: your manual placement for note ${i + 1} no longer fits and was ignored.`, ...extra });
-    }
+    if (!bad.length) return;
+    const what = bad.length === 1 ? '1 manual placement no longer fits and is' : `${bad.length} manual placements no longer fit and are`;
+    warnings.push({ kind: 'pin', message: `${where}: ${what} ignored.`, ...extra });
   };
 
   let totalCost = 0;

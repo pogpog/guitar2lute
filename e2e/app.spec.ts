@@ -115,3 +115,19 @@ test('offers PNG icons Android needs to install the app', async ({ page, request
     expect(res.headers()['content-type']).toContain('image/png');
   }
 });
+
+test('removes manual placements that no longer fit after a tuning change', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('add-chord').click();
+  const box = page.getByTestId('guitar-chordbox').first();
+  for (const id of ['open-0', 'cell-1-1', 'cell-2-2', 'cell-3-2', 'open-4', 'open-5', 'open-5']) await box.getByTestId(id).click(); // Am
+  await page.getByTestId('view-lute').click();
+  await page.getByTestId('lute-chordbox').first().locator('[data-testid^="lute-note-"]').first().click();
+  await expect(page.getByTestId('lute-chordbox').first().locator('.pinned').first()).toBeVisible();
+  await page.getByTestId('lute-tuning').selectOption('lute-13-baroque-dm');
+  const stale = page.locator('.warning-pin');
+  await expect(stale).toHaveCount(1);
+  await stale.getByRole('button', { name: 'Remove' }).click();
+  await expect(stale).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Clear overrides' })).toBeDisabled();
+});

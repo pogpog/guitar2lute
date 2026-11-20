@@ -1,4 +1,4 @@
-import type { ChordShape, LuteSettings, Overrides, Piece, Placement, Tuning } from './model';
+import type { ChordShape, LuteSettings, Overrides, Piece, Placement, Tuning, Warning } from './model';
 import { emptyOverrides } from './model';
 import type { TextImport } from './parse/importText';
 
@@ -132,4 +132,18 @@ export function pinChord(p: Piece, chord: number, placements: Record<number, Pla
   const chordVoicing = { ...p.overrides.chordVoicing };
   delete chordVoicing[chord];
   return { ...p, overrides: { ...p.overrides, chordPins: { ...p.overrides.chordPins, [chord]: { ...placements } }, chordVoicing } };
+}
+
+/** Removes the pins of the chord or tab column a `pin` warning points at. */
+export function removePinsFor(p: Piece, w: Warning): Piece {
+  const tabPins = { ...p.overrides.tabPins };
+  const chordPins = { ...p.overrides.chordPins };
+  if (w.tabColumn !== undefined) delete tabPins[w.tabColumn];
+  if (w.chord !== undefined) delete chordPins[w.chord];
+  return { ...p, overrides: { ...p.overrides, tabPins, chordPins } };
+}
+
+/** Removes the pins of every chord and tab column that a `pin` warning reports as no longer fitting. */
+export function removeStalePins(p: Piece, warnings: Warning[]): Piece {
+  return warnings.filter((w) => w.kind === 'pin').reduce(removePinsFor, p);
 }

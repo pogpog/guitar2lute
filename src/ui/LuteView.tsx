@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { LuteColumn, LuteResult, Midi, Piece } from '../core/model';
 import { cycleNote, limitsOf } from '../core/convert/convert';
 import { autoTransposeAsync } from '../core/convert/autoTranspose';
-import { clearOverrides, pinChord, pinTabColumn, setChordVoicing, setLuteSettings } from '../core/edit';
+import { clearOverrides, pinChord, pinTabColumn, removePinsFor, removeStalePins, setChordVoicing, setLuteSettings } from '../core/edit';
 import { LuteSettingsBar } from './LuteSettingsBar';
 import { TuningEditor } from './TuningEditor';
 import { LuteChordBox } from './LuteChordBox';
@@ -91,7 +91,11 @@ export function LuteView({ piece, update, result, playing, onPlayChord }: LuteVi
       <div ref={wrapRef} className="tab-wrap">
         <LuteTabView result={result} tuning={s.tuning} notation={s.notation} playing={playing} onCycle={cycleTab} width={width} />
       </div>
-      <WarningsPanel warnings={result.warnings} />
+      <WarningsPanel
+        warnings={result.warnings}
+        onRemovePins={(w) => update((p) => removePinsFor(p, w))}
+        onRemoveAllStale={() => update((p) => removeStalePins(p, result.warnings))}
+      />
     </section>
   );
 }

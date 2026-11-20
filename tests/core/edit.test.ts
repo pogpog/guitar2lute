@@ -113,3 +113,29 @@ describe('whole-shape pins', () => {
     expect(p.overrides.chordVoicing).toEqual({});
   });
 });
+
+describe('stale pin cleanup', () => {
+  const at = (course: number, fret: number) => ({ course, fret });
+  const pinned = () => {
+    let p = newPiece();
+    p = E.pinTabColumn(p, 2, { 0: at(1, 2), 1: at(2, 0) });
+    p = E.pinTabColumn(p, 5, { 0: at(0, 3) });
+    p = E.pinChord(p, 1, { 0: at(3, 2) });
+    return p;
+  };
+  it('removes the pins of the column or chord a warning points at', () => {
+    const p = pinned();
+    expect(E.removePinsFor(p, { kind: 'pin', message: '', tabColumn: 2 }).overrides.tabPins).toEqual({ 5: { 0: at(0, 3) } });
+    expect(E.removePinsFor(p, { kind: 'pin', message: '', chord: 1 }).overrides.chordPins).toEqual({});
+    expect(p.overrides.tabPins[2]).toBeDefined(); // not mutated
+  });
+  it('removes every pin the warnings report as stale, and nothing else', () => {
+    const out = E.removeStalePins(pinned(), [
+      { kind: 'pin', message: '', tabColumn: 2 },
+      { kind: 'drop', message: '', tabColumn: 5 },
+      { kind: 'pin', message: '', chord: 1 },
+    ]);
+    expect(out.overrides.tabPins).toEqual({ 5: { 0: at(0, 3) } });
+    expect(out.overrides.chordPins).toEqual({});
+  });
+});

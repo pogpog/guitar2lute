@@ -236,10 +236,11 @@ Each chord is converted independently with the same candidate generation and pla
 
 ### 6.8 Manual override
 - Clicking a note in the lute tab or a lute chord box moves it to its next valid placement (course/fret) for the same pitch or one of its octave shifts (marked). Only placements that fit beside the other notes shown are offered: a free course, no unison with another note, and a playable shape. Clicking never drops or moves another note.
-- The click pins the **whole shape shown** for that column or chord: the clicked note's new placement plus every other note's current placement. This stops the rest of the chord from re-arranging itself around the moved note. Every note in the shape then shows the pinned underline, and after a tuning change each pin that no longer fits gives its own warning.
+- The click pins the **whole shape shown** for that column or chord: the clicked note's new placement plus every other note's current placement. This stops the rest of the chord from re-arranging itself around the moved note. Every note in the shape then shows the pinned underline.
 - Pinning a chord clears its `chordVoicing` choice; choosing another voicing with ◀ ▶ clears the chord's pins (so ◀ ▶ stay usable on a pinned chord).
 - Pins are stored per note. Pins are hard constraints: candidates that violate them are discarded, and the DP is re-run so neighbouring columns adapt.
-- A pin that becomes impossible (e.g. after a tuning change) is ignored with a warning. Because a click pins the whole shape, the check also covers the shape as a whole: if every pin still fits on its own but the pinned shape is no longer playable (e.g. after lowering max stretch), so that keeping it would cost a note the unpinned column keeps, the column is solved without its pins and every pin in it gets a warning. Ignored pins stay stored (they apply again if the settings change back) until "Clear overrides".
+- A pin that becomes impossible (e.g. after a tuning change) is ignored with a warning. Because a click pins the whole shape, the check also covers the shape as a whole: if every pin still fits on its own but the pinned shape is no longer playable (e.g. after lowering max stretch), so that keeping it would cost a note the unpinned column keeps, the column is solved without its pins. A chord or column with stale pins gives **one** warning ("Tab column 12 (line 5): 3 manual placements no longer fit and are ignored."), not one per note.
+- Ignored pins stay stored, so they apply again if the settings change back. Each stale-pin warning has a **Remove** button that forgets that chord's or column's manual placements, and when several chords or columns have stale pins the warnings panel also offers **Remove all that no longer fit**. Nothing is removed without the user asking.
 - "Clear overrides" resets all pins for the piece.
 
 ### 6.9 Transpose controls and auto-transpose
@@ -291,7 +292,7 @@ interface LuteResult { chords: LuteChord[]; tab: (LuteColumn | {kind:'bar'} | {k
 | Non-6-string block | Warning; block skipped |
 | PDF without text / notation-software PDF | Specific error message; extracted text placed in paste box |
 | Unplaceable note | Octave-shift or drop, whichever costs less (§6.4); both flagged |
-| Impossible pin, or a pinned shape that is no longer playable | Pins ignored (still stored), warning per pin |
+| Impossible pin, or a pinned shape that is no longer playable | Pins ignored (still stored); one warning per chord or column, with Remove / Remove all that no longer fit |
 | Unreadable stored piece | Listed; opening it shows the reason; left out of "All pieces" export with a note |
 | Damaged index | Rebuilt from the stored pieces; never stops the app from starting |
 | Storage quota | Banner; export still available |

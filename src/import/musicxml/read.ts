@@ -1,3 +1,4 @@
+import { capoFromText } from './capo';
 import { childElements, childText, ImportError } from './xml';
 
 /** One struck note. `time` in integer units; `slot` 0 = main, −k = k-th grace column before (−1 nearest), +k = after-grace; `string` 0 = highest. */
@@ -7,6 +8,8 @@ export interface TabNote {
   string: number;
   fret: number;
   measure: number;
+  /** Sounding MIDI pitch, when the note was written with a `<pitch>`; used by the pitch check only. */
+  pitch?: number;
 }
 
 export interface TabMeasure {
@@ -163,7 +166,7 @@ function tuningMidi(st: Element): number | null {
   return 12 * (octave + 1) + step + Math.round(numberText(st, 'tuning-alter') ?? 0);
 }
 
-/** `<staff-tuning line="1..6">` (line 1 = lowest) → MIDI, index 0 = highest. Strings it leaves out stay standard (Task 8 decides the rest). */
+/** `<staff-tuning line="1..6">` (line 1 = lowest) → MIDI, index 0 = highest. Strings it leaves out stay standard. */
 function readTuning(details: Element | null): number[] {
   const tuning = STANDARD_TUNING.slice();
   if (!details) return tuning;
@@ -232,8 +235,25 @@ function continuesTie(note: Element): boolean {
   );
 }
 
+/** Written MIDI pitch of a `<pitch>`, or null. */
+function writtenPitch(note: Element): number | null {
+  const pitch = childElements(note, 'pitch')[0];
+  if (!pitch) return null;
+  const step = STEP_PC[childText(pitch, 'step') ?? ''];
+  const octave = numberText(pitch, 'octave');
+  if (step === undefined || octave === null) return null;
+  return 12 * (octave + 1) + step + Math.round(numberText(pitch, 'alter') ?? 0);
+}
+
 /** A tab-staff note at `time` → the note it strikes, or null (spec §5.5 "Notes"). `bar` names the bar in notices. */
-function tabNote(note: Element, time: number, measure: number, bar: string, notices: Notices): TabNote | null {
+function tabNote(
+  note: Element,
+  time: number,
+  measure: number,
+  bar: string,
+  shift: number,
+  notices: Notices,
+): TabNote | null {
   if (childElements(note, 'rest').length > 0) return null;
   if (childElements(note, 'cue').length > 0 || childElements(note, 'unpitched').length > 0) return null;
   if (childText(note, 'notehead') === 'x') return null;
@@ -257,7 +277,10 @@ function tabNote(note: Element, time: number, measure: number, bar: string, noti
     notices.inBar(HIGH_FRET, bar);
     return null;
   }
-  return { time, slot: 0, string: string - 1, fret, measure };
+  const written = writtenPitch(note);
+  const result: TabNote = { time, slot: 0, string: string - 1, fret, measure };
+  if (written !== null) result.pitch = written + shift;
+  return result;
 }
 
 /** Walks the part's measures with one cursor (spec §5.5 "Time"). */
@@ -267,6 +290,8 @@ function readTime(part: Element, ctx: Context): { measures: TabMeasure[]; notes:
   let start = 0;
   let divisions = 1;
   let quarters = 4;
+  /** Semitones from written to sounding pitch on the tab staff. */
+  let shift = 0;
   childElements(part, 'measure').forEach((measure, index) => {
     const number = measure.getAttribute('number') || String(index + 1);
     let cursor = start;
@@ -291,6 +316,10 @@ function readTime(part: Element, ctx: Context): { measures: TabMeasure[]; notes:
           const time = childElements(el, 'time')[0];
           const q = time ? timeQuarters(time) : null;
           if (q !== null) quarters = q;
+          for (const t of childElements(el, 'transpose')) {
+            if (hasNumber(t) && staffOf(t) !== ctx.staff) continue;
+            shift = Math.round(numberText(t, 'chromatic') ?? 0) + 12 * Math.round(numberText(t, 'octave-change') ?? 0);
+          }
           break;
         }
         case 'note': {
@@ -302,7 +331,7 @@ function readTime(part: Element, ctx: Context): { measures: TabMeasure[]; notes:
             reached = Math.max(reached, cursor);
           }
           if (noteStaff(el) === ctx.staff) {
-            const note = tabNote(el, at, index, number, ctx.notices);
+            const note = tabNote(el, at, index, number, shift, ctx.notices);
             const voice = childText(el, 'voice') ?? '1';
             if (childElements(el, 'grace').length > 0) {
               const groups = pending.get(voice) ?? [];
@@ -383,15 +412,161 @@ function dropClashes(notes: TabNote[], measures: TabMeasure[], notices: Notices)
   return kept;
 }
 
+// ---- Capo ----
+
+const PITCH_CHECK: BarWording = (_count, bars) =>
+  `The written pitches don't match the tab's tuning and frets in ${bars}; check the tuning and capo.`;
+
+/** The capo the score names (spec §5.5 "Tuning, capo and the pitch check"); 0 when none, or when it is out of range. */
+function findCapo(root: Element, tab: TabStaff, notices: Notices): number {
+  const declared = tab.details ? numberText(tab.details, 'capo') : null;
+  let capo = 0;
+  if (declared !== null && declared > 0) {
+    capo = Math.round(declared);
+  } else {
+    const found: number[] = [];
+    const take = (text: string): void => {
+      const value = capoFromText(text);
+      if (value !== null) found.push(value);
+    };
+    for (const el of childElements(root)) {
+      if (el.nodeName === 'credit') {
+        for (const w of Array.from(el.getElementsByTagName('credit-words'))) take(w.textContent ?? '');
+      } else if (el.nodeName === 'part') {
+        for (const measure of childElements(el, 'measure')) {
+          for (const direction of childElements(measure, 'direction')) {
+            const words = Array.from(direction.getElementsByTagName('words')).map((w) => (w.textContent ?? '').trim());
+            if (words.length > 0) take(words.join(' '));
+          }
+        }
+      }
+    }
+    if (found.length === 0) return 0;
+    capo = found[0];
+    if (found.some((v) => v !== capo)) notices.add(`The score names more than one capo; used capo ${capo}.`);
+  }
+  if (capo > 12) {
+    notices.add(`The score says capo ${capo}, which is more than 12; set the capo yourself.`);
+    return 0;
+  }
+  return capo;
+}
+
+/** A later clef, tuning or capo that differs from the first (the first one is used): notice naming the first such bar. */
+function laterChanges(tab: TabStaff, notices: Notices): void {
+  const tuningOf = (d: Element): string =>
+    childElements(d, 'staff-tuning')
+      .map((s) => `${s.getAttribute('line')}:${tuningMidi(s)}`)
+      .join(',');
+  const baseTuning = tab.details ? tuningOf(tab.details) : '';
+  const baseCapo = (tab.details ? numberText(tab.details, 'capo') : null) ?? 0;
+  for (const [index, measure] of childElements(tab.part, 'measure').entries()) {
+    for (const attrs of childElements(measure, 'attributes')) {
+      const clef = childElements(attrs, 'clef').find((c) => staffOf(c) === tab.staff);
+      const details = childElements(attrs, 'staff-details').find((d) => !hasNumber(d) || staffOf(d) === tab.staff);
+      const capo = details ? numberText(details, 'capo') : null;
+      const tuning = details ? tuningOf(details) : '';
+      const changed =
+        (clef !== undefined && childText(clef, 'sign') !== 'TAB') ||
+        (tuning !== '' && tuning !== baseTuning) ||
+        (capo !== null && capo !== baseCapo);
+      if (changed) {
+        const bar = measure.getAttribute('number') || String(index + 1);
+        notices.add(`The tab's tuning or capo changes in bar ${bar}; the first one was used.`);
+        return;
+      }
+    }
+  }
+}
+
+// ---- Tuning from the notes, pitch check ----
+
+/** Most common value; ties go to the one `rank` scores lowest. */
+function mostCommon(values: number[], rank: (v: number) => number): number {
+  const counts = new Map<number, number>();
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || rank(a[0]) - rank(b[0]))[0][0];
+}
+
+/** Each string's open pitch = the most common sounding pitch − fret over its notes; strings without pitched notes stay standard. */
+function tuningFromNotes(notes: TabNote[]): number[] {
+  return STANDARD_TUNING.map((standard, string) => {
+    const values = notes.filter((n) => n.string === string).map((n) => (n.pitch as number) - n.fret);
+    return values.length === 0 ? standard : mostCommon(values, (v) => Math.abs(v - standard));
+  });
+}
+
+/** d = sounding pitch − (open string + fret); expected 0 or the capo for most notes, otherwise one notice naming the bars off both. */
+function pitchCheck(notes: TabNote[], tuning: number[], capo: number, measures: TabMeasure[], notices: Notices): void {
+  const diffs = notes.map((n) => ({ n, d: (n.pitch as number) - (tuning[n.string] + n.fret) }));
+  if (diffs.length === 0) return;
+  const common = mostCommon(
+    diffs.map((x) => x.d),
+    (d) => (d === 0 ? 0 : d === capo ? 1 : 2 + Math.abs(d)),
+  );
+  if (common === 0 || common === capo) return;
+  for (const { n, d } of diffs) {
+    if (d !== 0 && d !== capo) notices.inBar(PITCH_CHECK, measures[n.measure].number);
+  }
+}
+
+// ---- Layout marks and repeats ----
+
+/** Per measure: does a `<print>` start a new system or page? */
+function printMarks(part: Element): boolean[] {
+  return childElements(part, 'measure').map((m) =>
+    childElements(m, 'print').some((p) => p.getAttribute('new-system') === 'yes' || p.getAttribute('new-page') === 'yes'),
+  );
+}
+
+/** Read from the tab part, else from the first part, where exporters usually put layout. */
+function layoutMarks(root: Element, tabPart: Element): boolean[] {
+  const own = printMarks(tabPart);
+  if (own.some(Boolean)) return own;
+  const first = childElements(root, 'part')[0];
+  return first ? printMarks(first) : own;
+}
+
+function hasRepeats(root: Element): boolean {
+  if (['repeat', 'ending', 'segno', 'coda'].some((name) => root.getElementsByTagName(name).length > 0)) return true;
+  return Array.from(root.getElementsByTagName('sound')).some((s) =>
+    ['dacapo', 'dalsegno', 'tocoda', 'fine'].some((a) => s.hasAttribute(a)),
+  );
+}
+
+const REPEATS =
+  'This score has repeats or D.C./D.S. marks; they are not followed: the music plays straight through as written, with first and second endings one after the other.';
+
 export function readMusicXml(doc: Document): TabScore {
   const root = doc.documentElement;
   const notices = new Notices();
   const tab = findTabStaff(root, notices);
-  const tuning = readTuning(tab.details);
+  let tuning = readTuning(tab.details);
   const unit = partUnit(tab.part);
   const { measures, notes } = readTime(tab.part, { unit, staff: tab.staff, notices });
   snap(notes, unit);
   const kept = dropClashes(notes, measures, notices);
   kept.sort((a, b) => a.time - b.time || a.slot - b.slot || a.string - b.string);
-  return { unit, tuning, capo: 0, measures, notes: kept, notices: notices.list() };
+  const capo = findCapo(root, tab, notices);
+  laterChanges(tab, notices);
+  const pitched = kept.filter((n) => n.pitch !== undefined);
+  if (!tab.details || childElements(tab.details, 'staff-tuning').length === 0) {
+    if (pitched.length === 0) {
+      notices.add('The tab has no tuning; standard tuning was used.');
+    } else {
+      tuning = tuningFromNotes(pitched);
+      notices.add(
+        'The tab has no tuning, so it was worked out from the notes.' +
+          (capo > 0
+            ? ` The written pitches may already include the capo, so the tuning could be ${capo} ${capo === 1 ? 'semitone' : 'semitones'} high.`
+            : ''),
+      );
+    }
+  }
+  pitchCheck(pitched, tuning, capo, measures, notices);
+  layoutMarks(root, tab.part).forEach((mark, i) => {
+    if (measures[i]) measures[i].newBlock = mark;
+  });
+  if (hasRepeats(root)) notices.add(REPEATS);
+  return { unit, tuning, capo, measures, notes: kept, notices: notices.list() };
 }

@@ -150,3 +150,35 @@ export function words(text: string): string {
 export function print(o: { system?: boolean; page?: boolean }): string {
   return `<print${o.system ? ' new-system="yes"' : ''}${o.page ? ' new-page="yes"' : ''}/>`;
 }
+
+/** One `<direction>` whose `<direction-type>` holds a `<words>` per text. */
+export function wordsOf(...texts: string[]): string {
+  return `<direction placement="above">${texts.map((t) => `<direction-type><words>${esc(t)}</words></direction-type>`).join('')}</direction>`;
+}
+
+/** A backward repeat barline. */
+export function repeatBar(): string {
+  return '<barline location="right"><bar-style>light-heavy</bar-style><repeat direction="backward"/></barline>';
+}
+
+/** A first-ending bracket. */
+export function ending(): string {
+  return '<barline location="left"><ending number="1" type="start"/></barline>';
+}
+
+export function segno(): string {
+  return '<direction><direction-type><segno/></direction-type></direction>';
+}
+
+/** `<sound>` with the given attributes, e.g. `sound({ dacapo: 'yes' })`. */
+export function sound(attrs: Record<string, string>): string {
+  const a = Object.entries(attrs)
+    .map(([k, v]) => ` ${k}="${esc(v)}"`)
+    .join('');
+  return `<direction><sound${a}/></direction>`;
+}
+
+/** A plain light-light double barline (not a repeat). */
+export function doubleBar(): string {
+  return '<barline location="right"><bar-style>light-light</bar-style></barline>';
+}

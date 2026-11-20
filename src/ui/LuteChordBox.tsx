@@ -27,7 +27,7 @@ export function LuteChordBox({ chord, tuning, notation, flats, onCycle, onVoicin
       <button type="button" aria-label="Previous voicing" disabled={!pinned && chord.chosen <= 0} onClick={() => onVoicing(-1)}>◀</button>
       <span>{`${chord.voicings.length ? chord.chosen + 1 : 0}/${chord.voicings.length}`}</span>
       <button type="button" aria-label="Next voicing" disabled={!pinned && chord.chosen >= chord.voicings.length - 1} onClick={() => onVoicing(1)}>▶</button>
-      <button type="button" aria-label="Play chord" onClick={onPlay}>♪</button>
+      <button type="button" className="play-chord" aria-label="Play chord" onClick={onPlay}>♪ Play</button>
     </div>
   );
   if (!v) {

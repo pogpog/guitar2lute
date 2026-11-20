@@ -47,3 +47,10 @@ describe('GuitarTabView', () => {
     expect(html(<GuitarTabView events={events} tuning={STANDARD_GUITAR} playing={null} />)).not.toContain('<mark');
   });
 });
+
+describe('chord box play button', () => {
+  const PLAY = /<button[^>]*class="play-chord"[^>]*aria-label="Play chord"[^>]*>♪ Play<\/button>|<button[^>]*aria-label="Play chord"[^>]*class="play-chord"[^>]*>♪ Play<\/button>/;
+  it('is a labelled play button on guitar chord boxes', () => {
+    expect(html(<GuitarChordBox shape={{ name: '', frets: [0, 1, 0, 2, 3, 'x'], baseFret: 1 }} tuning={STANDARD_GUITAR} capo={0} flats={false} onChange={noop} onPlay={noop} onRemove={noop} onMove={noop} />)).toMatch(PLAY);
+  });
+});

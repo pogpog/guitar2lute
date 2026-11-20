@@ -98,9 +98,11 @@ export function GuitarChordBox({ shape, tuning, capo, flats, onChange, onPlay, o
       </svg>
       <figcaption className="notes">{names || '—'}</figcaption>
       <div className="box-controls">
+        <button type="button" className="play-chord" aria-label="Play chord" onClick={onPlay}>♪ Play</button>
+      </div>
+      <div className="box-controls">
         <button type="button" aria-label="Show lower frets" onClick={() => onChange(shiftBaseFret(shape, -1))}>▲</button>
         <button type="button" aria-label="Show higher frets" onClick={() => onChange(shiftBaseFret(shape, 1))}>▼</button>
-        <button type="button" aria-label="Play chord" onClick={onPlay}>♪</button>
         <button type="button" aria-label="Move chord left" onClick={() => onMove(-1)}>◀</button>
         <button type="button" aria-label="Move chord right" onClick={() => onMove(1)}>▶</button>
         <button type="button" aria-label="Delete chord" onClick={onRemove}>✕</button>

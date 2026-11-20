@@ -77,6 +77,8 @@ input[type='number'] { width: 4.5em; }
 .chordbox .notes { font-size: 0.8rem; color: var(--muted); text-align: center; }
 .box-controls { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: center; }
 .box-controls button { padding: 0 6px; font-size: 0.85rem; }
+.box-controls button.play-chord { padding: 3px 14px; font-size: 1rem; font-weight: 600; background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.box-controls + .box-controls { margin-top: 4px; }
 .hit { cursor: pointer; }
 .hit:hover { fill: var(--playing); }
 .add-chord { align-self: center; padding: 24px 16px; border-style: dashed; }

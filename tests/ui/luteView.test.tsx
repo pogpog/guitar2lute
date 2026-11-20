@@ -64,3 +64,12 @@ describe('LuteView tuning line', () => {
     expect(text(out, 'lute-tuning-line')).toBe('Lute tuning: Diapasons: 8 D2 Fretted: 7 F2 · 6 G2 · 5 C3 · 4 F3 · 3 A3 · 2 D4 · 1 G4');
   });
 });
+
+describe('lute chord box play button', () => {
+  it('is a labelled play button', () => {
+    const p = newPiece();
+    p.guitar.chords = [{ name: '', frets: [0, 0, 1, 2, 2, 0], baseFret: 1 }];
+    const out = html(<LuteView piece={p} update={noop} result={convertPiece(p)} playing={null} onPlayChord={noop} />);
+    expect(out).toMatch(/<button[^>]*class="play-chord"[^>]*>♪ Play<\/button>/);
+  });
+});

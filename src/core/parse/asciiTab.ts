@@ -97,7 +97,7 @@ function blocksFromRun(run: LineInfo[]): { blocks: LineInfo[][]; skipped: LineIn
   return { blocks, skipped };
 }
 
-function parseBlock(lines: LineInfo[], xOffset: number): { events: TabEvent[]; width: number; warnings: Warning[] } {
+function parseBlock(lines: LineInfo[], xOffset: number): { events: TabEvent[]; width: number; warnings: Warning[]; endsWithBar: boolean } {
   const block = alignLeadingBars(lines);
   const warnings: Warning[] = [];
   const tokens: Token[] = [];
@@ -182,7 +182,8 @@ function parseBlock(lines: LineInfo[], xOffset: number): { events: TabEvent[]; w
     });
   }
   while (bi < bars.length) { pushBar(bars[bi]); bi++; }
-  return { events, width, warnings };
+  const endsWithBar = block.filter((l) => l.body.endsWith('|')).length >= 4;
+  return { events, width, warnings, endsWithBar };
 }
 
 export function parseAsciiTab(raw: string): AsciiParseResult {
@@ -191,6 +192,8 @@ export function parseAsciiTab(raw: string): AsciiParseResult {
   const events: TabEvent[] = [];
   let labels: number[] | null = null;
   let xOffset = 0;
+  let prevEnd: { width: number; endsWithBar: boolean } | null = null;
+  let lastBreak: Extract<TabEvent, { kind: 'break' }> | null = null;
   let i = 0;
   while (i < infos.length) {
     if (!infos[i].isTab) { i++; continue; }
@@ -212,10 +215,17 @@ export function parseAsciiTab(raw: string): AsciiParseResult {
         });
       }
       for (const block of blocks) {
+        // Blocks follow each other in time; a barline closing one block and opening the next counts once.
+        if (prevEnd) {
+          const shared = prevEnd.endsWithBar && block.filter((l) => l.body.startsWith('|')).length >= 4;
+          xOffset += prevEnd.width - (shared ? 1 : 0);
+          lastBreak!.next = xOffset;
+        }
         const parsed = parseBlock(block, xOffset);
-        events.push(...parsed.events, { kind: 'break', next: xOffset + parsed.width + 4 });
+        lastBreak = { kind: 'break', next: xOffset + parsed.width };
+        events.push(...parsed.events, lastBreak);
         warnings.push(...parsed.warnings);
-        xOffset += parsed.width + 4;
+        prevEnd = { width: parsed.width, endsWithBar: parsed.endsWithBar };
         if (!labels && block.every((l) => l.label)) labels = block.map((l) => parsePitchClass(l.label!)!);
       }
     }

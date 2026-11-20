@@ -51,6 +51,9 @@ src/
     storage.ts          # schemaVersion, migrations, (de)serialise
   import/
     pdf.ts              # pdfjs-dist text extraction → reconstructed monospace text (lazy-loaded)
+    sniff.ts            # PDF / MusicXML / compressed MusicXML detection from the file's first bytes
+    unzip.ts            # minimal .zip reader for .mxl (DecompressionStream, no dependency)
+    musicxml.ts         # MusicXML tab staff → ASCII tab text with Tuning/Capo headers
   audio/
     pluck.ts            # WebAudio Karplus-Strong pluck + scheduler
   ui/                   # React components
@@ -60,7 +63,7 @@ src/
     PlaybackControls.tsx
 ```
 
-Dependencies: `react`, `react-dom`, `vite`, `typescript`, `vite-plugin-pwa`, `pdfjs-dist`, `tonal`; dev: `vitest`, `@playwright/test`.
+Dependencies: `react`, `react-dom`, `vite`, `typescript`, `vite-plugin-pwa`, `pdfjs-dist`, `tonal`; dev: `vitest`, `@playwright/test`, `@xmldom/xmldom` (a `DOMParser` for the MusicXML unit tests, which run in Node; the app uses the browser's own).
 
 Data flow: user input → `Piece` (stored) → `convertPiece()` (pure, derived, memoised) → `LuteResult` → renderers. Lute output is never stored; only the settings and user overrides are.
 
@@ -175,7 +178,7 @@ Piece-level selector for guitar input tuning (presets + custom) and capo (0–12
 
 ### 5.3 Text import (`normalize.ts`, `headers.ts`, `asciiTab.ts`)
 1. **Normalize:** CRLF → LF; expand tab characters to 8-column stops; NBSP → space; Unicode dashes (– — ‐ − ‒) → `-`; `‖`, `|:`, `:|`, `*|`, `|*` → `|`.
-2. **Headers:** `capo\s*(on\s*)?(\d+)` (also "2nd fret"); `tuning:\s*…` matched against known names (Standard, Drop D, DADGAD, Open G, Open D, Eb/half-step down) or six note names.
+2. **Headers:** `capo\s*(on\s*)?(\d+)` (also "2nd fret"); `tuning:\s*…` matched against known names (Standard, Drop D, DADGAD, Open G, Open D, Eb/half-step down) or six note names, low to high. Note names without octaves are placed in the octave nearest standard tuning; with octaves (`Tuning: E2 A2 D3 F#3 B3 E4`) they are taken as written. Either way a tuning that matches a preset becomes that preset.
 3. **Find string lines:** a line is a candidate if, after an optional label `^\s*[A-Ga-g][#b]?\s*[|:]?`, at least 60% of its characters are in `-0-9|hpbr/\\~x()<>sn`. Exactly 6 consecutive candidate lines form a block (v1 is 6-string only); other runs produce a warning with line numbers. Lines may differ in length.
 4. **String assignment:** by position in the block (top line = string 1, high). Labels are used only to infer tuning: each label's pitch class is placed in the octave nearest the standard-tuning pitch of that string.
 5. **Tokenize** each string line into `(startCol, endCol, kind, value)` tokens: fret numbers (adjacent digits form one number when ≤ 24), barlines, technique characters.
@@ -198,6 +201,28 @@ Piece-level selector for guitar input tuning (presets + custom) and capo (0–12
 - Join pages, then run the same text pipeline as §5.3.
 - **Detection:** if the text contains fret digits but no dash runs (`-{3,}`) on candidate lines, show a specific error: "This PDF looks like it was produced by notation software (Guitar Pro/MuseScore). Only PDFs of plain-text tab are supported in this version." Also put the extracted text in the paste box.
 - Any parse warnings: the extracted text is placed in the paste box for manual correction.
+
+### 5.5 MusicXML import (`import/sniff.ts`, `import/unzip.ts`, `import/musicxml.ts`)
+MusicXML is the exchange format MuseScore and most notation programs export; unlike a PDF it records each tab note's string and fret, the tuning and the rhythm exactly.
+
+- **Opening a file:** the import dialog's file button is "Open PDF or MusicXML…" and has no file-type filter (Android's picker greys out `.mxl` files it has no type for). The file's first bytes decide what it is: `%PDF` → PDF import (§5.4); `PK\x03\x04` → compressed MusicXML (`.mxl`); otherwise text starting (after an optional BOM and whitespace) with `<?xml` or `<score-partwise` → MusicXML. Anything else: "This file isn't a PDF or a MusicXML file."
+- **`.mxl` files** are zip archives. `unzip.ts` reads the central directory and inflates entries with the browser's `DecompressionStream('deflate-raw')` (stored entries are copied). The score is the file `META-INF/container.xml` names as its first `rootfile`, or failing that the first `.xml`/`.musicxml` entry outside `META-INF/`. Entries over 20 MB uncompressed, encrypted entries and Zip64 archives are refused with a message. `score-timewise` files are refused ("Only part-wise MusicXML is supported", which is what MuseScore and Guitar Pro write).
+- **Which staff:** the first staff whose clef is `TAB`, found either as its own part or as one staff of a multi-staff part (`<clef number="n">`, notes with `<staff>n</staff>`). Notes on any other staff are ignored. More tab staves → the first is used and a notice names the others. No tab staff → "This MusicXML file has no tab staff (only standard notation). Only tab staves can be imported in this version." A tab staff with other than 6 strings → "The tab staff has N strings; only 6-string guitar tab can be imported."
+- **Tuning:** the staff's `<staff-tuning line="1..6">` (line 1 = lowest string), with octaves, written as a header `Tuning: E2 A2 D3 F#3 B3 E4`. Missing → standard tuning.
+- **Capo:** `<staff-details><capo>`, or else a text direction anywhere in the score matching `capo` followed by a number or Roman numeral ("Capo III", "capo 3", "Capo on 2"), written as `Capo: 3`.
+- **Notes:** each note's `<technical><string>` (1 = highest) and `<fret>`. Notes are placed by their start time: each voice keeps its own position, advanced by `<duration>` and moved by `<backup>` / `<forward>`; `<chord/>` notes share the previous note's start. All voices' notes that start together form one column. Rests take time but make no column. A note with `<tie type="stop"/>` continues an earlier note and is not struck again, so it is left out. Grace notes (no duration) get their own column just before the note they precede. A tab note without string/fret is skipped with a notice. Two notes on the same string at the same moment → the first is kept and a notice names the bar.
+- **Layout and rhythm:** columns sit at character positions proportional to their start time, with the shortest gap between notes in the piece set to 3 characters (room for a two-digit fret and a dash) and columns pushed apart where grace notes need room. So the rhythm survives exactly; how fast it plays is the Speed slider's job, as for any tab. Each measure ends with `|`. A measure with `<print new-system="yes">` starts a new block (system) of six lines; without any such marks, a block holds 4 measures. String lines are labelled from the tuning (`e B G D A E`). Example:
+
+  ```
+  Tuning: E2 A2 D3 G3 B3 E4
+  Capo: 3
+
+  e|------|--1--------3--1-----|
+  B|------|--------------------|
+  ...
+  ```
+- **Ignored:** standard-notation staves, lyrics, dynamics, fingerings, techniques (slides, hammer-ons, bends), tempo marks (the Speed slider sets playback speed), and the title. Repeats and endings are not expanded; if the score has any, a notice says repeated sections play once.
+- **Result:** the generated text goes into the paste box, exactly as a PDF's extracted text does, and the usual preview, warnings and Import button take over (§5.3). It is what gets stored as the piece's source text. Notices from the MusicXML reading (other tab staves, skipped notes, same-string clashes, repeats) are listed in the dialog under the file button; they are not repeated after import.
 
 ## 6. Conversion
 
@@ -291,6 +316,8 @@ interface LuteResult { chords: LuteChord[]; tab: (LuteColumn | {kind:'bar'} | {k
 | Unparseable tab lines | Warning with line number; the rest imports |
 | Non-6-string block | Warning; block skipped |
 | PDF without text / notation-software PDF | Specific error message; extracted text placed in paste box |
+| File that is neither PDF nor MusicXML; damaged or unsupported `.mxl`; MusicXML without a 6-string tab staff | Specific error message; paste box unchanged |
+| MusicXML details that can't be carried over (other tab staves, notes without string/fret, same-string clashes, repeats) | Notices in the import dialog; the rest imports |
 | Unplaceable note | Octave-shift or drop, whichever costs less (§6.4); both flagged |
 | Impossible pin, or a pinned shape that is no longer playable | Pins ignored (still stored); one warning per chord or column, with Remove / Remove all that no longer fit |
 | Unreadable stored piece | Listed; opening it shows the reason; left out of "All pieces" export with a note |
@@ -309,14 +336,19 @@ interface LuteResult { chords: LuteChord[]; tab: (LuteColumn | {kind:'bar'} | {k
   - Pins: pinned placements are respected; impossible pins produce a warning.
   - `tabcode`: fixture output.
   - `storage`: round-trip and schemaVersion handling.
+  - `musicxml` (`@xmldom/xmldom` as `DOMParser`; small hand-written scores, no third-party files): tuning with octaves, capo from `<capo>` and from "Capo III" text, voices merged by start time via `<backup>`/`<forward>`, chords, ties left out, grace notes, rests, a tab staff inside a multi-staff part, new-system breaks and the 4-measure default, no tab staff / 7-string errors; and a round trip: the generated text, run through `importTabText`, gives back every note's string and fret in order with the given tuning and capo.
+  - `unzip`: an `.mxl` built in the test (stored and deflated entries) reads back the container's root file; oversized and encrypted entries are refused.
+  - `sniff`: PDF, zip, XML with and without BOM, other.
 - **Snapshot tests:** SVG output of chord boxes and tab for French/Italian/modern with 6, 7, 8, 10 and 13 courses.
 - **Playwright smoke test:** load app → add a chord by clicking → paste a short tab → switch to Lute → change notation → output visible; app loads offline after first visit.
+- **Playwright, MusicXML:** open a small `.mxl` built by the test through the import dialog → the paste box shows the Tuning/Capo headers and tab, Import fills the guitar tab with the right capo and tuning.
 
 ## 13. Out of scope for v1 (v2 candidates)
 - PDFs from notation software (positioned numbers on vector staff lines): clustering numeric text items into 6 y-bands.
 - OCR of scanned PDFs.
 - Non-6-string guitar tab (7-string, bass).
 - Rhythm/duration input and lute rhythm flags.
-- TabCode import; MusicXML/Guitar Pro import.
+- TabCode import; Guitar Pro (`.gp`, `.gpx`) import.
+- MusicXML without a tab staff (standard notation only): would need string/fret assignment for the guitar side, and merging several parts.
 - Period letter-form font for French tab.
 - Cloud sync / sharing.

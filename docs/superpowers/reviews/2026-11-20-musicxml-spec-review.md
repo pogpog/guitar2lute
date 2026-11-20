@@ -381,3 +381,15 @@ Two more:
 | Which `staff-details` | Matched by `number` (M3) |
 | Notice granularity | Aggregated per kind, with bar numbers (M6) |
 | What counts as "repeats" | Repeats, endings, D.C./D.S./segno/coda (M8) |
+
+---
+
+# Second pass (on revision 2939b58)
+
+Adopts every earlier item. New problems found and how the spec (af23076) answers them:
+
+1. **100-character block cap chops lute output into 2-bar systems** (lute lines break at every guitar block; view 900 px ≈ 125–130 source characters). → Cap raised to 125 characters.
+2. **A pushed note can land on the barline and show in the previous bar** (parser places a note on the barline character before the bar). → Barlines are one-character items in placement; at least one dash after a column's last digit; pushed-notes test fixture.
+3. **`<transpose>` ignored** by the pitch check and by "missing tuning from pitches" (an octave-transposing guitar part would warn wrongly, or give a tuning an octave high); capo possibly double-counted. → Sounding pitch applies `<transpose>` first; notice when a pitch-derived tuning may include the capo; fixture.
+
+Smaller: XML decoded with its declared encoding (ISO-8859-1), plain text capped at 1 MB; continuous blocks defined (longest line; `|` on 4+ of 6 lines; parser change, old pieces keep the pause until re-imported); exact gap counting for the scale (threshold 5%, sample's 16ths are 11–13%); single-column default scale; `<tied type="continue">`; "Capo at fret 3"; out-of-date text in §1, §2 (sniff comment, ui/ file list) and §11; default speed ≈ 42 bpm noted.

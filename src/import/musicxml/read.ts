@@ -38,6 +38,16 @@ const STEP_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B:
 /** Wording of a notice that names bars: `count` occurrences, `bars` already written out ("bar 2", "bars 2, 5"). */
 type BarWording = (count: number, bars: string) => string;
 
+const NO_STRING_FRET: BarWording = (count, bars) =>
+  `${count} ${count === 1 ? 'note' : 'notes'} without string/fret ${count === 1 ? 'was' : 'were'} skipped (${bars}).`;
+const HARMONIC: BarWording = (count, bars) =>
+  `${count} ${count === 1 ? 'harmonic was' : 'harmonics were'} skipped (${bars}).`;
+const HIGH_FRET: BarWording = (count, bars) =>
+  `${count} ${count === 1 ? 'note' : 'notes'} above fret 24 ${count === 1 ? 'was' : 'were'} skipped (${bars}).`;
+const BAD_STRING: BarWording = (count, bars) =>
+  `${count} ${count === 1 ? 'note' : 'notes'} on a string outside 1–6 ${count === 1 ? 'was' : 'were'} skipped (${bars}).`;
+const CLASH: BarWording = (count, bars) =>
+  `${count} ${count === 1 ? 'place had' : 'places had'} two notes on one string; the first was kept (${bars}).`;
 const TIMING: BarWording = (_count, bars) => `Timing in ${bars} went before the start of the bar and was corrected.`;
 
 interface BarItem {
@@ -213,14 +223,40 @@ function technicalOf(note: Element): Element | null {
   return null;
 }
 
-/** A tab-staff note at `time` → the note it strikes, or null. The note rules of spec §5.5 "Notes" belong here. */
-function tabNote(note: Element, time: number, measure: number): TabNote | null {
+/** True when the note continues a tie: `<tie type="stop"/>`, or without any `<tie>` the visual `<tied>` stop/continue. */
+function continuesTie(note: Element): boolean {
+  const ties = childElements(note, 'tie');
+  if (ties.length > 0) return ties.some((t) => t.getAttribute('type') === 'stop');
+  return childElements(note, 'notations').some((nt) =>
+    childElements(nt, 'tied').some((t) => ['stop', 'continue'].includes(t.getAttribute('type') ?? '')),
+  );
+}
+
+/** A tab-staff note at `time` → the note it strikes, or null (spec §5.5 "Notes"). `bar` names the bar in notices. */
+function tabNote(note: Element, time: number, measure: number, bar: string, notices: Notices): TabNote | null {
   if (childElements(note, 'rest').length > 0) return null;
+  if (childElements(note, 'cue').length > 0 || childElements(note, 'unpitched').length > 0) return null;
+  if (childText(note, 'notehead') === 'x') return null;
+  if (continuesTie(note)) return null;
   const technical = technicalOf(note);
-  if (!technical) return null;
-  const string = numberText(technical, 'string');
-  const fret = numberText(technical, 'fret');
-  if (string === null || fret === null) return null;
+  const string = technical ? numberText(technical, 'string') : null;
+  const fret = technical ? numberText(technical, 'fret') : null;
+  if (!technical || string === null || fret === null) {
+    notices.inBar(NO_STRING_FRET, bar);
+    return null;
+  }
+  if (childElements(technical, 'harmonic').length > 0) {
+    notices.inBar(HARMONIC, bar);
+    return null;
+  }
+  if (string < 1 || string > 6) {
+    notices.inBar(BAD_STRING, bar);
+    return null;
+  }
+  if (fret > 24) {
+    notices.inBar(HIGH_FRET, bar);
+    return null;
+  }
   return { time, slot: 0, string: string - 1, fret, measure };
 }
 
@@ -236,6 +272,9 @@ function readTime(part: Element, ctx: Context): { measures: TabMeasure[]; notes:
     let cursor = start;
     let reached = start;
     let lastStart = start;
+    /** Per voice: grace columns waiting for the note they precede, and the time of the last note. */
+    const pending = new Map<string, TabNote[][]>();
+    const lastTime = new Map<string, number>();
     const duration = (el: Element): number => {
       const d = numberText(el, 'duration') ?? 0;
       if (d < 0) {
@@ -263,8 +302,24 @@ function readTime(part: Element, ctx: Context): { measures: TabMeasure[]; notes:
             reached = Math.max(reached, cursor);
           }
           if (noteStaff(el) === ctx.staff) {
-            const note = tabNote(el, at, index);
-            if (note) notes.push(note);
+            const note = tabNote(el, at, index, number, ctx.notices);
+            const voice = childText(el, 'voice') ?? '1';
+            if (childElements(el, 'grace').length > 0) {
+              const groups = pending.get(voice) ?? [];
+              pending.set(voice, groups);
+              if (note) {
+                if (childElements(el, 'chord').length > 0 && groups.length > 0) groups[groups.length - 1].push(note);
+                else groups.push([note]);
+              }
+            } else {
+              const groups = pending.get(voice) ?? [];
+              groups.forEach((group, i) =>
+                group.forEach((g) => notes.push({ ...g, time: at, slot: i - groups.length })),
+              );
+              pending.delete(voice);
+              lastTime.set(voice, at);
+              if (note) notes.push(note);
+            }
           }
           break;
         }
@@ -280,6 +335,11 @@ function readTime(part: Element, ctx: Context): { measures: TabMeasure[]; notes:
           reached = Math.max(reached, cursor);
           break;
       }
+    }
+    for (const [voice, groups] of pending) {
+      groups.forEach((group, i) =>
+        group.forEach((g) => notes.push({ ...g, time: lastTime.get(voice) ?? start, slot: i + 1 })),
+      );
     }
     const length = reached > start ? reached - start : Math.round(quarters * ctx.unit);
     measures.push({ number, start, length, newBlock: false });
@@ -303,6 +363,26 @@ function snap(notes: TabNote[], unit: number): void {
   }
 }
 
+/** Two notes on one string in one column: the same fret merges silently, otherwise the first stays and the bar gets a notice. */
+function dropClashes(notes: TabNote[], measures: TabMeasure[], notices: Notices): TabNote[] {
+  const seen = new Map<string, TabNote>();
+  const clashed = new Set<string>();
+  const kept: TabNote[] = [];
+  for (const note of notes) {
+    const column = `${note.time}:${note.slot}`;
+    const key = `${column}:${note.string}`;
+    const first = seen.get(key);
+    if (!first) {
+      seen.set(key, note);
+      kept.push(note);
+    } else if (first.fret !== note.fret && !clashed.has(column)) {
+      clashed.add(column);
+      notices.inBar(CLASH, measures[note.measure].number);
+    }
+  }
+  return kept;
+}
+
 export function readMusicXml(doc: Document): TabScore {
   const root = doc.documentElement;
   const notices = new Notices();
@@ -311,6 +391,7 @@ export function readMusicXml(doc: Document): TabScore {
   const unit = partUnit(tab.part);
   const { measures, notes } = readTime(tab.part, { unit, staff: tab.staff, notices });
   snap(notes, unit);
-  notes.sort((a, b) => a.time - b.time || a.slot - b.slot || a.string - b.string);
-  return { unit, tuning, capo: 0, measures, notes, notices: notices.list() };
+  const kept = dropClashes(notes, measures, notices);
+  kept.sort((a, b) => a.time - b.time || a.slot - b.slot || a.string - b.string);
+  return { unit, tuning, capo: 0, measures, notes: kept, notices: notices.list() };
 }

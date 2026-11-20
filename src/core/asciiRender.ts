@@ -22,8 +22,14 @@ export function tuningLabels(t: Tuning): string[] {
 
 /** Re-create readable ASCII tab from the model. Gaps follow source x spacing, clamped to 2..6 dashes. */
 export function renderAsciiSystem(system: TabEvent[], labels: string[]): string[] {
+  return layoutAsciiSystem(system, labels).rows;
+}
+
+/** The rendered rows plus, for each column event in order, its [start, end) character range in every row. */
+export function layoutAsciiSystem(system: TabEvent[], labels: string[]): { rows: string[]; spans: { start: number; end: number }[] } {
   const w = Math.max(...labels.map((l) => l.length));
   const rows = labels.map((l) => `${l.padEnd(w)}|`);
+  const spans: { start: number; end: number }[] = [];
   let lastX: number | null = null;
   let lastWasBar = false;
   for (const ev of system) {
@@ -36,6 +42,8 @@ export function renderAsciiSystem(system: TabEvent[], labels: string[]): string[
     if (ev.kind !== 'col') continue;
     const gap = lastX === null ? 2 : Math.max(2, Math.min(6, ev.col.x - lastX - 1));
     const cw = Math.max(1, ...ev.col.notes.map((n) => String(n.fret).length));
+    const start = rows[0].length + gap;
+    spans.push({ start, end: start + cw });
     for (let s = 0; s < rows.length; s++) {
       const note = ev.col.notes.find((n) => n.string === s);
       rows[s] += '-'.repeat(gap) + (note ? String(note.fret).padEnd(cw, '-') : '-'.repeat(cw));
@@ -44,5 +52,5 @@ export function renderAsciiSystem(system: TabEvent[], labels: string[]): string[
     lastWasBar = false;
   }
   if (!lastWasBar) for (let s = 0; s < rows.length; s++) rows[s] += '--|';
-  return rows;
+  return { rows, spans };
 }

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { midiToFreq, karplusStrong, stepsFromColumns } from '../../src/audio/pluck';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { midiToFreq, karplusStrong, stepsFromColumns, Player } from '../../src/audio/pluck';
 
 const rms = (a: Float32Array) => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / a.length);
 
@@ -28,5 +28,38 @@ describe('stepsFromColumns', () => {
     expect(steps.map((s) => s.time)).toEqual([0, 0.3, 0.4]);
     expect(steps.map((s) => s.index)).toEqual([0, 1, 2]);
     expect(stepsFromColumns([], 100)).toEqual([]);
+  });
+});
+
+describe('Player', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('tells the tab listener that playback ended when a chord interrupts it', () => {
+    class FakeCtx {
+      state = 'running';
+      currentTime = 0;
+      sampleRate = 8000;
+      destination = {};
+      createBuffer(_c: number, n: number) {
+        return { getChannelData: () => new Float32Array(n) };
+      }
+      createBufferSource() {
+        return { buffer: null, connect: (g: unknown) => g, start() {}, stop() {} };
+      }
+      createGain() {
+        return { gain: { value: 0 }, connect: (d: unknown) => d };
+      }
+      resume() {
+        return Promise.resolve();
+      }
+    }
+    vi.stubGlobal('AudioContext', FakeCtx);
+    vi.stubGlobal('window', globalThis);
+    const p = new Player();
+    const seen: (number | null)[] = [];
+    p.playSteps([{ time: 0, pitches: [60], index: 3 }], (i) => seen.push(i));
+    p.playChord([64]);
+    expect(seen).toEqual([null]);
+    p.stop();
+    expect(seen).toEqual([null]);
   });
 });

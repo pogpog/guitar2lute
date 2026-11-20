@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import type { Midi } from '../core/model';
 import { browserStorage, exportPieces, importPieces, type StorageLike } from '../core/storage';
 import { convertPiece } from '../core/convert/convert';
-import { guitarColumns } from '../core/piece';
+import { chordPitches, guitarColumns } from '../core/piece';
 import { preferFlats } from '../core/pitch';
 import { toTabCode } from '../core/tabcode';
 import { setTitle } from '../core/edit';
@@ -28,7 +28,14 @@ export function App({ storage }: { storage?: StorageLike }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const result = useMemo(() => convertPiece(piece), [guitar, lute, overrides]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const guitarFlats = useMemo(() => preferFlats(guitarColumns(piece).flatMap((c) => c.pitches)), [guitar]);
+  const guitarFlats = useMemo(
+    () =>
+      preferFlats([
+        ...guitar.chords.flatMap((c) => chordPitches(c, guitar.tuning, guitar.capo).map((x) => x.pitch)),
+        ...guitarColumns(piece).flatMap((c) => c.pitches),
+      ]),
+    [guitar],
+  );
 
   const playChord = useCallback((pitches: Midi[]) => player.playChord(pitches), [player]);
 
@@ -125,7 +132,7 @@ export function App({ storage }: { storage?: StorageLike }) {
         <main className="main">
           <h1 className="print-title">{piece.title}</h1>
           {view === 'guitar' ? (
-            <GuitarView piece={piece} update={update} flats={guitarFlats} onPlayChord={playChord} />
+            <GuitarView piece={piece} update={update} flats={guitarFlats} playing={playing} onPlayChord={playChord} />
           ) : (
             <LuteView piece={piece} update={update} result={result} playing={playing} onPlayChord={playChord} />
           )}

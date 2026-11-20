@@ -41,6 +41,8 @@ export class Player {
   private readonly cache = new Map<number, AudioBuffer>();
   private sources: AudioBufferSourceNode[] = [];
   private timers: number[] = [];
+  /** the current tab listener; told `null` when playback ends or is interrupted */
+  private onStep: ((index: number | null) => void) | null = null;
 
   private ensure(): AudioContext {
     if (!this.ctx) this.ctx = new AudioContext();
@@ -78,6 +80,7 @@ export class Player {
   playSteps(steps: Step[], onStep: (index: number | null) => void): void {
     this.stop();
     if (!steps.length) return;
+    this.onStep = onStep;
     const ctx = this.ensure();
     const lead = 0.1;
     const t0 = ctx.currentTime + lead;
@@ -86,7 +89,12 @@ export class Player {
       this.timers.push(window.setTimeout(() => onStep(s.index), (s.time + lead) * 1000));
     }
     const end = steps[steps.length - 1].time + 1.5 + lead;
-    this.timers.push(window.setTimeout(() => onStep(null), end * 1000));
+    this.timers.push(
+      window.setTimeout(() => {
+        this.onStep = null;
+        onStep(null);
+      }, end * 1000),
+    );
   }
 
   stop(): void {
@@ -100,5 +108,8 @@ export class Player {
     this.sources = [];
     this.timers.forEach((t) => window.clearTimeout(t));
     this.timers = [];
+    const listener = this.onStep;
+    this.onStep = null;
+    listener?.(null);
   }
 }

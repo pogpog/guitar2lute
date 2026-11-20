@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { splitSystems, tuningLabels, renderAsciiSystem } from '../../src/core/asciiRender';
+import { splitSystems, tuningLabels, renderAsciiSystem, layoutAsciiSystem } from '../../src/core/asciiRender';
 import { parseAsciiTab } from '../../src/core/parse/asciiTab';
 import { STANDARD_GUITAR } from '../../src/core/tunings';
 import type { TabEvent } from '../../src/core/model';
@@ -29,4 +29,13 @@ describe('asciiRender', () => {
       expect(cols(parseAsciiTab(text).events)).toEqual(cols(first.events));
     });
   }
+  it('reports where each column sits in the rendered rows', () => {
+    const sys = splitSystems(parseAsciiTab(TWO_DIGIT).events)[0];
+    const { rows, spans } = layoutAsciiSystem(sys, tuningLabels(STANDARD_GUITAR));
+    expect(rows).toEqual(renderAsciiSystem(sys, tuningLabels(STANDARD_GUITAR)));
+    expect(spans).toHaveLength(cols(sys).length);
+    // the first column holds 10 on the high e and 8 on B
+    expect(rows[0].slice(spans[0].start, spans[0].end)).toBe('10');
+    expect(rows[1].slice(spans[0].start, spans[0].end)).toBe('8-');
+  });
 });

@@ -38,4 +38,12 @@ describe('GuitarTabView', () => {
     expect(out).toContain('<pre class="ascii-tab">');
     expect(out).toContain('e|');
   });
+  it('highlights the playing column', () => {
+    const events = parseAsciiTab(AM_ARPEGGIO).events;
+    const out = html(<GuitarTabView events={events} tuning={STANDARD_GUITAR} playing={1} />);
+    // column 1 is the G-string 2: one highlight per string row
+    expect(out.match(/<mark class="playing">/g)).toHaveLength(6);
+    expect(out).toContain('<mark class="playing">2</mark>');
+    expect(html(<GuitarTabView events={events} tuning={STANDARD_GUITAR} playing={null} />)).not.toContain('<mark');
+  });
 });

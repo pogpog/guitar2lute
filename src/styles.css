@@ -89,6 +89,7 @@ input[type='number'] { width: 4.5em; }
 .tab-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px; color: var(--text); }
 .glyph-bg { fill: var(--surface); }
 .playing { fill: var(--playing); }
+mark.playing { background: var(--playing); color: inherit; border-radius: 2px; }
 
 .warnings { margin-top: 12px; border: 1px solid var(--border); border-left: 4px solid var(--warn); border-radius: 6px; padding: 6px 10px; background: var(--surface); }
 .warnings summary { cursor: pointer; color: var(--warn); font-weight: 600; }

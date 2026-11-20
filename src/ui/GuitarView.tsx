@@ -13,10 +13,12 @@ export interface GuitarViewProps {
   piece: Piece;
   update: (fn: (p: Piece) => Piece) => void;
   flats: boolean;
+  /** index of the playing tab column, or null */
+  playing?: number | null;
   onPlayChord: (pitches: Midi[]) => void;
 }
 
-export function GuitarView({ piece, update, flats, onPlayChord }: GuitarViewProps) {
+export function GuitarView({ piece, update, flats, playing = null, onPlayChord }: GuitarViewProps) {
   const [importing, setImporting] = useState(false);
   const [warnings, setWarnings] = useState<Warning[]>([]);
   const g = piece.guitar;
@@ -65,7 +67,7 @@ export function GuitarView({ piece, update, flats, onPlayChord }: GuitarViewProp
         Tab
         <button type="button" data-testid="open-import" onClick={() => setImporting(true)}>Import tab…</button>
       </h2>
-      <GuitarTabView events={g.tab} tuning={g.tuning} />
+      <GuitarTabView events={g.tab} tuning={g.tuning} playing={playing} />
       <WarningsPanel warnings={warnings} />
 
       {importing && (

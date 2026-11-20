@@ -29,4 +29,13 @@ describe('App', () => {
     new PieceStore(s).save(newPiece('Greensleeves'));
     expect(html(<App storage={s} />)).toContain('value="Greensleeves"');
   });
+  it('spells guitar chord notes in the chord key even before any tab exists', () => {
+    const s = new MemoryStorage();
+    const p = newPiece('E chord');
+    p.guitar.chords = [{ name: '', frets: [0, 0, 1, 2, 2, 0], baseFret: 1 }];
+    new PieceStore(s).save(p);
+    const out = html(<App storage={s} />);
+    expect(out).toContain('E B E G♯ B E');
+    expect(out).not.toContain('A♭');
+  });
 });

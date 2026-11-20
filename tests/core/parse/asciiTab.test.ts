@@ -122,3 +122,14 @@ describe('importTabText', () => {
     expect(importTabText(F.MESSY.replace('Tuning: Drop D', '')).tuning).toBeNull();
   });
 });
+
+describe('parseAsciiTab positions', () => {
+  it('records where each bar is and where the next block starts', () => {
+    const block = ['|0---|--3-|', '|----|----|', '|----|----|', '|----|----|', '|----|----|', '|----|----|'];
+    const r = parseAsciiTab([...block, '', ...block].join('\n'));
+    const bars = r.events.filter((e) => e.kind === 'bar');
+    expect(bars.map((e) => (e.kind === 'bar' ? e.x : null))).toEqual([5, 10, 20, 25]);
+    const breaks = r.events.filter((e) => e.kind === 'break');
+    expect(breaks.map((e) => (e.kind === 'break' ? e.next : null))).toEqual([15, 30]);
+  });
+});

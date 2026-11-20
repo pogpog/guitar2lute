@@ -165,12 +165,12 @@ function parseBlock(lines: LineInfo[], xOffset: number): { events: TabEvent[]; w
 
   const bars = [...barCounts.entries()].filter(([col, n]) => col > 0 && n >= 4).map(([col]) => col).sort((a, b) => a - b);
   const events: TabEvent[] = [];
-  const pushBar = () => {
-    if (events.length && events[events.length - 1].kind !== 'bar') events.push({ kind: 'bar' });
+  const pushBar = (col: number) => {
+    if (events.length && events[events.length - 1].kind !== 'bar') events.push({ kind: 'bar', x: xOffset + col });
   };
   let bi = 0;
   for (const g of groups) {
-    while (bi < bars.length && bars[bi] < g.start) { pushBar(); bi++; }
+    while (bi < bars.length && bars[bi] < g.start) { pushBar(bars[bi]); bi++; }
     const srcLine = block[g.firstString];
     events.push({
       kind: 'col',
@@ -181,7 +181,7 @@ function parseBlock(lines: LineInfo[], xOffset: number): { events: TabEvent[]; w
       },
     });
   }
-  while (bi < bars.length) { pushBar(); bi++; }
+  while (bi < bars.length) { pushBar(bars[bi]); bi++; }
   return { events, width, warnings };
 }
 
@@ -213,7 +213,7 @@ export function parseAsciiTab(raw: string): AsciiParseResult {
       }
       for (const block of blocks) {
         const parsed = parseBlock(block, xOffset);
-        events.push(...parsed.events, { kind: 'break' });
+        events.push(...parsed.events, { kind: 'break', next: xOffset + parsed.width + 4 });
         warnings.push(...parsed.warnings);
         xOffset += parsed.width + 4;
         if (!labels && block.every((l) => l.label)) labels = block.map((l) => parsePitchClass(l.label!)!);

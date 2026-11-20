@@ -233,3 +233,20 @@ test('spells out the lute and guitar tunings course by course', async ({ page })
   await page.getByLabel('Course 1 note').selectOption({ label: 'F' });
   await expect(line).toContainText('· 1 F4');
 });
+
+test('shows imported tab with the spacing it was written with', async ({ page }) => {
+  const tab = [
+    '|0-----------------------3-------|----5-3-2-----------------------|',
+    '|0-----------3-1-0-------0-------|------------5---4---------------|',
+    '|0---------------0---2-----------|5-------2-----------------------|',
+    '|--------2---4-------------------|5---------------4---------------|',
+    '|--------------------------------|3---------------2---------------|',
+    '|0---------------0---------------|--------------------------------|',
+  ];
+  await page.goto('/');
+  await page.getByTestId('open-import').click();
+  await page.getByTestId('import-text').fill(tab.join('\n'));
+  await page.getByTestId('do-import').click();
+  const labels = ['e', 'B', 'G', 'D', 'A', 'E'];
+  await expect(page.getByTestId('guitar-tab').locator('pre')).toHaveText(tab.map((l, s) => labels[s] + l).join('\n'));
+});

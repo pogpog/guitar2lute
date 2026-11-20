@@ -22,7 +22,12 @@ export interface ChordShape {
 
 export interface TabNote { string: number; fret: number; }
 export interface TabColumn { notes: TabNote[]; x: number; src?: { line: number; col: number }; }
-export type TabEvent = { kind: 'col'; col: TabColumn } | { kind: 'bar' } | { kind: 'break' };
+export type TabEvent =
+  | { kind: 'col'; col: TabColumn }
+  /** x: where the barline was in the source, on the same scale as TabColumn.x (absent in pieces imported before it was recorded) */
+  | { kind: 'bar'; x?: number }
+  /** next: where the next block's lines begin in the source, on the same scale as TabColumn.x */
+  | { kind: 'break'; next?: number };
 
 export interface Placement { course: number; fret: number; }
 

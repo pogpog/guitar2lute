@@ -1,5 +1,5 @@
 import type { TabEvent, Tuning } from '../core/model';
-import { layoutAsciiSystem, splitSystems, tuningLabels } from '../core/asciiRender';
+import { layoutAsciiSystem, splitSystems, systemOrigins, tuningLabels } from '../core/asciiRender';
 
 interface GuitarTabViewProps {
   events: TabEvent[];
@@ -10,6 +10,7 @@ interface GuitarTabViewProps {
 
 export function GuitarTabView({ events, tuning, playing = null }: GuitarTabViewProps) {
   const systems = splitSystems(events);
+  const origins = systemOrigins(events);
   if (!systems.length) {
     return <p className="muted" data-testid="guitar-tab-empty">No tab yet. Use “Import tab…” to paste text or upload a PDF.</p>;
   }
@@ -18,7 +19,7 @@ export function GuitarTabView({ events, tuning, playing = null }: GuitarTabViewP
   return (
     <div className="ascii-tabs" data-testid="guitar-tab">
       {systems.map((sys, i) => {
-        const { rows, spans } = layoutAsciiSystem(sys, labels);
+        const { rows, spans } = layoutAsciiSystem(sys, labels, origins[i]);
         const local = playing === null ? -1 : playing - first;
         first += spans.length;
         const span = local >= 0 && local < spans.length ? spans[local] : null;

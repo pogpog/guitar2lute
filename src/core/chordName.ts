@@ -25,6 +25,9 @@ export function transposeChordName(name: string, semis: number, flats: boolean):
   if (semis === 0) return name;
   const m = /^([A-G][#b♯♭]?)(.*?)(?:\/([A-G][#b♯♭]?))?$/.exec(name.trim());
   if (!m) return name;
+  // A letter run after the root must be chord vocabulary (m, maj, sus, add…); otherwise it is a word like "Bridge".
+  const word = /^[a-z]+/i.exec(m[2])?.[0];
+  if (word && !/^(?:maj|min|dim|aug|sus|add|alt|m)+$/i.test(word)) return name;
   const root = parsePitchClass(m[1]);
   if (root === null) return name;
   let out = pcName(root + semis, flats) + m[2];

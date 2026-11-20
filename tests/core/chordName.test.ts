@@ -16,6 +16,15 @@ describe('detectChordName', () => {
 });
 
 describe('transposeChordName', () => {
+  it('leaves typed words that are not chord names alone', () => {
+    expect(transposeChordName('Bridge', 2, false)).toBe('Bridge');
+    expect(transposeChordName('Chorus', 2, false)).toBe('Chorus');
+    expect(transposeChordName('Ending', 2, false)).toBe('Ending');
+    expect(transposeChordName('Fmadd9', 2, false)).toBe('Gmadd9');
+    expect(transposeChordName('Dsus4', 2, false)).toBe('Esus4');
+    expect(transposeChordName('Cmaj7', 2, false)).toBe('Dmaj7');
+    expect(transposeChordName('Bdim', 1, false)).toBe('Cdim');
+  });
   it('transposes root, quality and bass', () => {
     expect(transposeChordName('E', 3, true)).toBe('G');
     expect(transposeChordName('Am', 3, true)).toBe('Cm');

@@ -90,11 +90,11 @@ export function inferGuitarTuning(pcsHighToLow: number[]): Tuning {
     if (d > 5) d -= 12;
     return base + d;
   });
-  return guitarTuning(courses);
+  return guitarTuningFromCourses(courses);
 }
 
-/** The matching preset, or a custom tuning named by its notes from low to high. */
-function guitarTuning(courses: Midi[]): Tuning {
+/** The matching preset, or a custom tuning named by its notes from low to high. Courses run high to low. */
+export function guitarTuningFromCourses(courses: Midi[]): Tuning {
   const match = GUITAR_PRESETS.find((t) => t.courses.every((m, i) => m === courses[i]));
   if (match) return cloneTuning(match);
   const label = [...courses].reverse().map((m) => midiToName(m, false, false)).join(' ');
@@ -104,7 +104,7 @@ function guitarTuning(courses: Midi[]): Tuning {
 export function setGuitarStringPitch(t: Tuning, string: number, midi: Midi): Tuning {
   const courses = [...t.courses];
   courses[string] = midi;
-  return guitarTuning(courses);
+  return guitarTuningFromCourses(courses);
 }
 
 const NATURAL = new Set([0, 2, 4, 5, 7, 9, 11]);

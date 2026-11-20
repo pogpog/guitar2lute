@@ -132,4 +132,9 @@ describe('parseAsciiTab positions', () => {
     const breaks = r.events.filter((e) => e.kind === 'break');
     expect(breaks.map((e) => (e.kind === 'break' ? e.next : null))).toEqual([15, 30]);
   });
+  it('lets a Tuning header with octaves win over string labels', () => {
+    const text = 'Tuning: E3 A3 D4 G4 B3 E4\n' +
+      ['e|--0--|', 'B|--1--|', 'G|--0--|', 'D|--2--|', 'A|--3--|', 'E|-----|'].join('\n');
+    expect(importTabText(text).tuning!.courses).toEqual([64, 59, 67, 62, 57, 52]);
+  });
 });

@@ -39,7 +39,11 @@ const optionCost = (o: NoteOption) => (o.placement.fret > 0 ? o.placement.fret *
 
 const byCost = (a: ColumnCandidate, b: ColumnCandidate) => a.cost - b.cost || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 
-/** Keeps the k cheapest candidates; `limit()` is the cost a newcomer must not exceed. */
+/** The shape as played: the same placements in any note order count as one voicing. */
+const shapeOf = (c: ColumnCandidate) =>
+  c.notes.map((n) => `${n.placement.course}:${n.placement.fret}`).sort().join(',');
+
+/** Keeps the k cheapest distinct shapes; `limit()` is the cost a newcomer must not exceed. */
 class TopK {
   readonly items: ColumnCandidate[] = [];
   constructor(private readonly k: number) {}
@@ -48,6 +52,12 @@ class TopK {
   }
   add(c: ColumnCandidate): void {
     if (c.cost > this.limit()) return;
+    const shape = shapeOf(c);
+    const same = this.items.findIndex((x) => shapeOf(x) === shape);
+    if (same >= 0) {
+      if (byCost(c, this.items[same]) >= 0) return;
+      this.items.splice(same, 1);
+    }
     let i = this.items.length;
     while (i > 0 && byCost(c, this.items[i - 1]) < 0) i--;
     this.items.splice(i, 0, c);
@@ -145,7 +155,8 @@ export function solveColumn(
   search(placeable, 'direct', forced, forcedPenalty, limits, primary);
 
   const extra = new TopK(size);
-  if (primary.items.length === 0) {
+  const fitsAsWritten = primary.items.length > 0;
+  if (!fitsAsWritten) {
     const floor = (kept: number) => kept * WEIGHTS.open; // the cheapest any placement can be
     for (let d = 0; d <= placeable.length; d++) {
       if (forcedPenalty + d * WEIGHTS.dropDuplicate + floor(placeable.length - d) > primary.limit()) break;
@@ -167,7 +178,19 @@ export function solveColumn(
   }
 
   // Full-chord candidates always come first, so alternatives never replace the default voicing.
-  const candidates = [...primary.items, ...extra.items].slice(0, size);
+  const candidates = [...primary.items, ...extra.items.filter((x) => !primary.items.some((p) => shapeOf(p) === shapeOf(x)))].slice(0, size);
+
+  // A pinned shape that no longer fits (e.g. after lowering max stretch) must not cost a note:
+  // if the pins forced a drop the free solution avoids, or dropped a pinned note, ignore them all.
+  const pinnedIdx = notes.filter((n) => n.pinned).map((n) => n.srcIndex);
+  if (!fitsAsWritten && pinnedIdx.length > 0 && candidates.length > 0) {
+    const best = candidates[0];
+    const free = solveColumn(pitches, limits, {}, k, opts);
+    const droppedPinned = best.dropped.some((d) => pinnedIdx.includes(d.srcIndex));
+    if (droppedPinned || free.candidates[0].dropped.length < best.dropped.length) {
+      return { candidates: free.candidates, badPins: [...badPins, ...pinnedIdx].sort((a, b) => a - b) };
+    }
+  }
   if (candidates.length === 0) {
     // Only reachable if the enumeration cap cut every search short; never return an empty list.
     candidates.push({ notes: [], dropped: notes.map((n) => ({ srcIndex: n.srcIndex, pitch: n.pitch })), cost: penaltyOf(notes, []), hand: null, bass: null, key: '' });

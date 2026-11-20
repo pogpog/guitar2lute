@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { initialPiece, safeLoad } from '../../src/ui/state';
+import { initialPiece, safeLoad, shouldSave } from '../../src/ui/state';
 import { MemoryStorage, PieceStore } from '../../src/core/storage';
 import { newPiece } from '../../src/core/piece';
 import { combineSvgs, parseIntInRange, slug } from '../../src/ui/util';
@@ -49,5 +49,18 @@ describe('util', () => {
   it('slugs titles for filenames', () => {
     expect(slug('  Greensleeves (arr.) ')).toBe('greensleeves-arr');
     expect(slug('')).toBe('piece');
+  });
+});
+
+describe('shouldSave', () => {
+  it('skips an untouched new piece but keeps saving one that is already stored', () => {
+    const store = new PieceStore(new MemoryStorage());
+    const blank = newPiece();
+    expect(shouldSave(store, blank)).toBe(false);
+    expect(shouldSave(store, newPiece('Greensleeves'))).toBe(true);
+    const cleared = newPiece('Old');
+    store.save(cleared);
+    cleared.title = 'Untitled'; // emptied after it was saved: the change must still be saved
+    expect(shouldSave(store, cleared)).toBe(true);
   });
 });

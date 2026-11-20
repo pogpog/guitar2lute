@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Piece } from '../core/model';
 import { PieceStore, type PieceMeta, type StorageLike } from '../core/storage';
-import { newPiece } from '../core/piece';
+import { isBlankPiece, newPiece } from '../core/piece';
 import { touch } from '../core/edit';
 
 const SAVE_ERROR = 'Could not save: browser storage is full or unavailable. Export your pieces as JSON to keep them.';
@@ -15,6 +15,11 @@ export function safeLoad(store: PieceStore, id: string): Piece | null {
   } catch {
     return null;
   }
+}
+
+/** Autosave skips an untouched new piece, but keeps saving one that is already stored (so clearing it sticks). */
+export function shouldSave(store: PieceStore, p: Piece): boolean {
+  return !isBlankPiece(p) || store.has(p.id);
 }
 
 export function initialPiece(store: PieceStore): Piece {
@@ -35,6 +40,7 @@ export function usePieces(storage: StorageLike) {
 
   const trySave = useCallback(
     (p: Piece) => {
+      if (!shouldSave(store, p)) return;
       try {
         store.save(p);
         setSaveError(null);
@@ -108,17 +114,18 @@ export function usePieces(storage: StorageLike) {
 
   const importMany = useCallback(
     (pieces: Piece[]) => {
-      for (const p of pieces) {
-        try {
-          store.save(p);
-        } catch {
-          setSaveError(SAVE_ERROR);
-        }
+      trySave(piece);
+      let saved: Piece[] = [];
+      try {
+        saved = store.addImported(pieces);
+      } catch {
+        setSaveError(SAVE_ERROR);
       }
       setList(store.list());
-      if (pieces[0]) setPiece(pieces[0]);
+      if (saved[0]) setPiece(saved[0]);
     },
-    [store],
+    // the open piece is saved first, so an import is compared with its latest edits
+    [piece, store, trySave],
   );
 
   /** Every readable saved piece; pieces that cannot be read are reported in `notice`. */

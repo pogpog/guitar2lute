@@ -131,3 +131,26 @@ test('removes manual placements that no longer fit after a tuning change', async
   await expect(stale).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Clear overrides' })).toBeDisabled();
 });
+
+test('does not fill the piece list with empty untitled pieces', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('new-piece').click();
+  await page.getByTestId('new-piece').click();
+  await page.waitForTimeout(800); // autosave debounce
+  await page.reload();
+  await expect(page.locator('.piece-open')).toHaveCount(0);
+});
+
+test('importing an old backup never overwrites the edited piece', async ({ page }) => {
+  await page.goto('/');
+  const title = page.getByLabel('Piece title');
+  await title.fill('Greensleeves');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export').selectOption('json')]);
+  const backup = await (await dl.createReadStream()).toArray().then((c) => Buffer.concat(c));
+  await title.fill('Greensleeves edited');
+  // import straight away, before the autosave debounce has run
+  await page.locator('input[type="file"][accept*="json"]').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: backup });
+  await expect(title).toHaveValue('Greensleeves (imported)');
+  await expect(page.locator('.piece-open', { hasText: 'Greensleeves edited' })).toHaveCount(1);
+  await expect(page.locator('.piece-open', { hasText: 'Greensleeves (imported)' })).toHaveCount(1);
+});

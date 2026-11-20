@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { newPiece, chordPitches, columnPitches, guitarColumns } from '../../src/core/piece';
+import { newPiece, chordPitches, columnPitches, guitarColumns, isBlankPiece } from '../../src/core/piece';
 import { STANDARD_GUITAR } from '../../src/core/tunings';
 
 describe('piece helpers', () => {
@@ -32,5 +32,18 @@ describe('piece helpers', () => {
       { kind: 'col', col: { notes: [{ string: 1, fret: 1 }], x: 5 } },
     ];
     expect(guitarColumns(p)).toEqual([{ x: 2, pitches: [64], index: 0 }, { x: 5, pitches: [60], index: 1 }]);
+  });
+});
+
+describe('isBlankPiece', () => {
+  it('is true only for an untouched new piece', () => {
+    expect(isBlankPiece(newPiece())).toBe(true);
+    expect(isBlankPiece(newPiece('Greensleeves'))).toBe(false);
+    const withChord = newPiece();
+    withChord.guitar.chords = [{ name: '', frets: [null, null, null, null, null, null], baseFret: 1 }];
+    expect(isBlankPiece(withChord)).toBe(false);
+    const withTab = newPiece();
+    withTab.guitar.tab = [{ kind: 'bar' }];
+    expect(isBlankPiece(withTab)).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import type { Piece } from './model';
 import { SCHEMA_VERSION } from './model';
+import { newId } from './piece';
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -162,6 +163,35 @@ export class PieceStore {
     const list = this.list().filter((m) => m.id !== p.id);
     list.unshift({ id: p.id, title: p.title, updatedAt: p.updatedAt });
     this.storage.setItem(INDEX_KEY, JSON.stringify(list));
+  }
+
+  has(id: string): boolean {
+    return this.storage.getItem(pieceKey(id)) !== null;
+  }
+
+  /**
+   * Saves imported pieces without ever overwriting a different saved piece (an edited original, or one
+   * this version cannot read): such a piece arrives as a copy with a new id and "(imported)" in its title.
+   * An identical copy changes nothing, and repeats within one import are skipped.
+   * Returns the pieces as saved, in import order.
+   */
+  addImported(pieces: Piece[]): Piece[] {
+    const out: Piece[] = [];
+    const seen = new Set<string>();
+    for (const p of pieces) {
+      const text = JSON.stringify(p);
+      if (seen.has(text)) continue;
+      seen.add(text);
+      const stored = this.storage.getItem(pieceKey(p.id));
+      if (stored === text) {
+        out.push(p);
+        continue;
+      }
+      const q = stored === null ? p : { ...p, id: newId(), title: `${p.title || 'Untitled'} (imported)` };
+      this.save(q);
+      out.push(q);
+    }
+    return out;
   }
 
   remove(id: string): void {

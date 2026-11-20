@@ -19,6 +19,12 @@ export function newPiece(title = 'Untitled'): Piece {
   };
 }
 
+/** An untouched new piece (default or empty title, no chords, no tab): not worth saving. */
+export function isBlankPiece(p: Piece): boolean {
+  const t = p.title.trim();
+  return (t === '' || t === 'Untitled') && p.guitar.chords.length === 0 && p.guitar.tab.length === 0;
+}
+
 /** Sounding strings of a chord shape, high string first. */
 export function chordPitches(shape: ChordShape, tuning: Tuning, capo: number): { pitch: Midi; string: number }[] {
   const out: { pitch: Midi; string: number }[] = [];

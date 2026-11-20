@@ -113,6 +113,36 @@ describe('JSON import/export', () => {
     expect(importPieces(exportPieces([a, b]))).toEqual([a, b]);
     expect(importPieces(JSON.stringify(a))).toEqual([a]);
   });
+  it('never overwrites a saved piece when importing', () => {
+    const s = new MemoryStorage();
+    const store = new PieceStore(s);
+    const mine = newPiece('Greensleeves');
+    const backup = JSON.parse(JSON.stringify(mine)) as typeof mine; // exported earlier
+    mine.guitar.capo = 2; // edited since
+    store.save(mine);
+    const fresh = newPiece('New one');
+    const saved = store.addImported([backup, fresh, backup]);
+    // the edited piece is untouched; the older copy arrives under a new id
+    expect(store.load(mine.id)).toEqual(mine);
+    expect(saved[0].id).not.toBe(mine.id);
+    expect(saved[0].title).toBe('Greensleeves (imported)');
+    expect(store.load(saved[0].id)?.guitar.capo).toBe(0);
+    // a piece that is new here keeps its id; the same piece twice in one file is not doubled
+    expect(saved[1]).toEqual(fresh);
+    expect(saved).toHaveLength(2);
+    // importing an identical copy changes nothing
+    expect(store.addImported([mine])).toEqual([mine]);
+    expect(store.list()).toHaveLength(3);
+  });
+  it('never overwrites a saved piece it cannot read', () => {
+    const s = new MemoryStorage();
+    const store = new PieceStore(s);
+    const p = newPiece('From the future');
+    s.setItem(`g2l:piece:${p.id}`, JSON.stringify({ ...p, schemaVersion: 99 }));
+    const [saved] = store.addImported([p]);
+    expect(saved.id).not.toBe(p.id);
+    expect(JSON.parse(s.getItem(`g2l:piece:${p.id}`)!).schemaVersion).toBe(99);
+  });
   it('rejects invalid JSON and newer bundles', () => {
     expect(() => importPieces('nope')).toThrow(/Not valid JSON/);
     expect(() => importPieces(JSON.stringify({ schemaVersion: 9, pieces: [] }))).toThrow(/newer version/);

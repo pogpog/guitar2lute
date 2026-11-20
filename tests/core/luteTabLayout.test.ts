@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { layoutLuteTab, LAYOUT } from '../../src/core/luteTabLayout';
+import { layoutLuteTab, luteLineWidth, LUTE_VIEW_WIDTH, LAYOUT } from '../../src/core/luteTabLayout';
 import { findPreset } from '../../src/core/tunings';
 import type { LuteNote, LuteTabEvent } from '../../src/core/model';
 
@@ -67,5 +67,46 @@ describe('layoutLuteTab', () => {
       }
       expect(systems[1].y, notation).toBeGreaterThanOrEqual(systems[0].y + systems[0].height + LAYOUT.systemGap);
     }
+  });
+});
+
+describe('luteLineWidth', () => {
+  type Item = { kind: 'col'; x: number } | { kind: 'bar' };
+  /** `bars` bars spread over columns every `step` chars, `perBar` columns per bar */
+  const items = (bars: number, perBar: number, step: number): Item[] => {
+    const out: Item[] = [];
+    let x = 0;
+    for (let b = 0; b < bars; b++) {
+      if (b > 0) out.push({ kind: 'bar' });
+      for (let i = 0; i < perBar; i++, x += step) out.push({ kind: 'col', x });
+    }
+    return out;
+  };
+  const toEvents = (list: Item[]): LuteTabEvent[] => {
+    let index = 0;
+    return list.map((it) => (it.kind === 'bar' ? it : col(index++, it.x, [note(0, 0)])));
+  };
+
+  it('agrees with the layout', () => {
+    const cases = [
+      items(3, 12, 3), // 3/4 in 16ths
+      items(2, 16, 3),
+      items(5, 8, 3), // 2/4
+      items(1, 3, 3),
+      items(8, 16, 3),
+      items(6, 7, 5),
+      items(4, 11, 2),
+    ];
+    const fits: boolean[] = [];
+    for (const c of cases) {
+      const oneLine = layoutLuteTab(toEvents(c), six, 'french', LUTE_VIEW_WIDTH).systems.length === 1;
+      expect(luteLineWidth(c) <= LUTE_VIEW_WIDTH).toBe(oneLine);
+      fits.push(oneLine);
+    }
+    expect(fits).toContain(true);
+    expect(fits).toContain(false);
+  });
+  it('ignores a leading bar', () => {
+    expect(luteLineWidth([{ kind: 'bar' }, { kind: 'col', x: 0 }])).toBe(luteLineWidth([{ kind: 'col', x: 0 }]));
   });
 });

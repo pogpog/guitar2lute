@@ -3,6 +3,30 @@ import { noteGlyph } from './notation';
 
 export const LAYOUT = { lineGap: 14, unit: 7, minGap: 20, margin: 20, systemGap: 28 };
 
+/** Width the lute view is laid out at by default. */
+export const LUTE_VIEW_WIDTH = 900;
+
+/** Horizontal advance of a column: half a gap first in a system, else scaled by its distance from the previous column. */
+function columnAdvance(x: number, lastSrcX: number | null): number {
+  const { unit, minGap } = LAYOUT;
+  return lastSrcX === null ? minGap / 2 : Math.min(minGap * 4, Math.max(minGap, (x - lastSrcX) * unit));
+}
+
+/** Pixel width `layoutLuteTab` needs to keep these items on one line, margins included. */
+export function luteLineWidth(items: ({ kind: 'col'; x: number } | { kind: 'bar' })[]): number {
+  let cursor: number = LAYOUT.margin;
+  let lastSrcX: number | null = null;
+  for (const it of items) {
+    if (it.kind === 'bar') {
+      if (lastSrcX !== null) cursor += LAYOUT.minGap / 2;
+    } else {
+      cursor += columnAdvance(it.x, lastSrcX);
+      lastSrcX = it.x;
+    }
+  }
+  return cursor + LAYOUT.margin;
+}
+
 export interface Glyph {
   x: number;
   y: number;
@@ -38,7 +62,7 @@ export function rowFor(course: number, notation: Notation): number {
 }
 
 export function layoutLuteTab(tab: LuteTabEvent[], tuning: Tuning, notation: Notation, maxWidth: number): TabLayout {
-  const { lineGap, unit, minGap, margin, systemGap } = LAYOUT;
+  const { lineGap, minGap, margin, systemGap } = LAYOUT;
   const lines = staffLineCount(tuning, notation);
   const extra = notation !== 'modern' && tuning.courses.length > 6;
   // Minimum rows of space above and below the staff; a system grows when its stacked diapasons need more.
@@ -84,7 +108,7 @@ export function layoutLuteTab(tab: LuteTabEvent[], tuning: Tuning, notation: Not
       }
       continue;
     }
-    let advance: number = lastSrcX === null ? minGap / 2 : Math.min(minGap * 4, Math.max(minGap, (ev.x - lastSrcX) * unit));
+    let advance = columnAdvance(ev.x, lastSrcX);
     if (cursor + advance > maxWidth - margin && cur.columns.length) {
       restart();
       advance = minGap / 2;

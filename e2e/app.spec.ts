@@ -102,3 +102,16 @@ test('explains why a saved piece cannot be opened', async ({ page }) => {
   await page.getByText('From the future').click();
   await expect(page.getByRole('alert')).toContainText('newer version');
 });
+
+test('offers PNG icons Android needs to install the app', async ({ page, request }) => {
+  await page.goto('/');
+  const href = await page.locator('link[rel="manifest"]').getAttribute('href');
+  const manifest = await (await request.get(href!)).json();
+  for (const size of ['192x192', '512x512']) {
+    const icon = manifest.icons.find((i: { sizes: string; type: string }) => i.sizes === size && i.type === 'image/png');
+    expect(icon, size).toBeTruthy();
+    const res = await request.get(icon.src);
+    expect(res.status(), size).toBe(200);
+    expect(res.headers()['content-type']).toContain('image/png');
+  }
+});

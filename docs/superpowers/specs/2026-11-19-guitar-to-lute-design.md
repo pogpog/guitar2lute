@@ -155,10 +155,11 @@ All glyph mappings live in one table in `notation.ts` so period letter forms (e.
 - **French:** 6 lines, top line = course 1. Course 7: written below the staff (fretted 7th-course notes on a ledger line below). Open diapasons below the staff: 8 = `/a`, 9 = `//a`, 10 = `///a`; on the Baroque 13-course 11 = `4`, 12 = `5`, 13 = `6`.
 - **Italian:** 6 lines, top line = course 6 (lowest), bottom line = course 1. Courses 7+ written **above** the staff: fretted 7th-course notes on a ledger above; open diapasons as the course number (`8`, `9`, `10`, …) above the staff.
 - **Modern:** one line per course, top = course 1, numbers on lines; diapasons get their own lines.
-- **Lute chord boxes:** vertical diagram with one line per fretted course; diapasons used by the chord shown underneath using the selected notation's diapason symbols.
+- **Lute chord boxes:** vertical diagram with one line per fretted course; diapasons used by the chord shown underneath using the selected notation's diapason symbols. Under a chord box there is no staff position to tell courses apart, so the 7th course and every modern-notation diapason are labelled with their course number (`7:a`, `7:0`, `8:0`); the other French and Italian diapason symbols are already distinct.
+- **Tab systems** grow to fit the diapasons they use: the space above (Italian) or below (French) the staff is sized from the most simultaneous diapasons in that system, so stacked diapasons never clip or run into the next system.
 
 ### 4.4 Note and chord naming
-`pitch.ts` spells notes by key: after transposition, choose sharps or flats by the most likely key (from the detected key of the whole piece, falling back to flats, which suit lute repertoire). Chord names are detected with tonal's `Chord.detect` (first result) and transposed with the piece; user-entered names are transposed with `Chord.transpose` by capo + transpose, so a typed name always matches the sounding chord (a box named "D" played with capo 2 is shown as E).
+`pitch.ts` spells notes by key: after transposition, choose sharps or flats by the most likely key (from the detected key of the whole piece, falling back to flats, which suit lute repertoire). Chord names are detected with tonal's `Chord.detect` (first result) and transposed with the piece; user-entered names are transposed by capo + transpose, so a typed name always matches the sounding chord (a box named "D" played with capo 2 is shown as E). A typed name is only transposed when it reads as a chord: any letters after the root must be chord vocabulary (`m`, `maj`, `min`, `dim`, `aug`, `sus`, `add`, `alt`), so a label such as "Bridge" or "Chorus" stays as typed.
 
 ## 5. Guitar input
 
@@ -231,20 +232,21 @@ Conversion runs in two passes.
 Keep the top K = 8 candidates per column by placement cost (always including any candidate that satisfies the column's pins). Viterbi over the columns minimises Σ placement + Σ transition. Bar and break events do not reset the hand position. Ties are broken deterministically (lower total placement cost, then lexicographic course list).
 
 ### 6.7 Chord boxes
-Each chord is converted independently with the same candidate generation and placement cost; the top 3 distinct voicings are returned, ranked. When the whole chord fits, versions that leave out one doubled note (never the bass, top or a pinned note) are also offered, ranked after every full-chord voicing, so a full six-note chord still has alternatives. The chosen voicing defaults to rank 1; `overrides.chordVoicing` selects another.
+Each chord is converted independently with the same candidate generation and placement cost; the top 3 distinct voicings are returned, ranked (the same placements in a different note order, which a unison in the chord allows, count as one voicing). When the whole chord fits, versions that leave out one doubled note (never the bass, top or a pinned note) are also offered, ranked after every full-chord voicing, so a full six-note chord still has alternatives. The chosen voicing defaults to rank 1; `overrides.chordVoicing` selects another.
 
 ### 6.8 Manual override
 - Clicking a note in the lute tab or a lute chord box moves it to its next valid placement (course/fret) for the same pitch or one of its octave shifts (marked). Only placements that fit beside the other notes shown are offered: a free course, no unison with another note, and a playable shape. Clicking never drops or moves another note.
 - The click pins the **whole shape shown** for that column or chord: the clicked note's new placement plus every other note's current placement. This stops the rest of the chord from re-arranging itself around the moved note. Every note in the shape then shows the pinned underline, and after a tuning change each pin that no longer fits gives its own warning.
 - Pinning a chord clears its `chordVoicing` choice; choosing another voicing with ◀ ▶ clears the chord's pins (so ◀ ▶ stay usable on a pinned chord).
 - Pins are stored per note. Pins are hard constraints: candidates that violate them are discarded, and the DP is re-run so neighbouring columns adapt.
-- A pin that becomes impossible (e.g. after a tuning change) is dropped with a warning.
+- A pin that becomes impossible (e.g. after a tuning change) is ignored with a warning. Because a click pins the whole shape, the check also covers the shape as a whole: if every pin still fits on its own but the pinned shape is no longer playable (e.g. after lowering max stretch), so that keeping it would cost a note the unpinned column keeps, the column is solved without its pins and every pin in it gets a warning. Ignored pins stay stored (they apply again if the settings change back) until "Clear overrides".
 - "Clear overrides" resets all pins for the piece.
 
 ### 6.9 Transpose controls and auto-transpose
 - Numeric transpose field (−12..+12).
 - "+3 guitar shapes" button: sets transpose to +3. On a G lute this gives the classic mapping (guitar strings 1, 2, 4, 5, 6 at the same fret; string 3 one fret higher).
-- "Auto" button: run the conversion for each transpose −6..+6 and pick the lowest total cost (shifted and dropped notes are heavily penalised); ties go to the smallest |transpose|, then 0, then +3.
+- "Auto" button: run the conversion for each transpose −6..+6 and pick the lowest total cost (shifted and dropped notes are heavily penalised); ties go to the smallest |transpose|, then 0, then +3. Auto yields to the browser between transposes and shows "Working…" (button disabled) until it finishes, so a long piece never freezes the page without feedback. Auto ignores pins.
+- Number fields (transpose, max fret, max stretch, capo, fretted courses) keep what is being typed (`-`, `1` on the way to `10`) and commit only complete in-range integers; leaving a field restores the saved value.
 
 ### 6.10 Output (`LuteResult`)
 ```ts
@@ -271,13 +273,15 @@ interface LuteResult { chords: LuteChord[]; tab: (LuteColumn | {kind:'bar'} | {k
 - Lute playback uses the converted pitches, so the user can compare the two by ear.
 
 ## 9. Persistence and export
-- Autosave the current piece to `localStorage` (debounced 500 ms), one key per piece plus an index. Quota errors show a non-blocking banner.
-- JSON export/import of a single piece or all pieces; files contain `schemaVersion`; `storage.ts` holds the migration functions (v1 needs none, but the hook exists).
+- Autosave the current piece to `localStorage` (debounced 500 ms, and at once when the page is hidden or closed), one key per piece plus an index. Quota errors show a non-blocking banner.
+- The index is a convenience, not the source of truth: entries are coerced to strings and de-duplicated, and pieces whose keys exist but are missing from the index (corrupt index, interrupted save) are listed again and kept on the next save.
+- Opening a stored piece that cannot be read shows why (e.g. "made by a newer version of the app"); "All pieces" export lists the pieces it had to leave out.
+- JSON export/import of a single piece or all pieces; files contain `schemaVersion`; `storage.ts` holds the migration functions (v1 needs none, but the hook exists). Loading checks the whole structure and the ranges the app's own controls allow (6 guitar strings, frets 0–24, capo 0–12, transpose −12..+12, max fret 4–12, max stretch 2–6, 1 ≤ fretted courses ≤ courses, MIDI 0–127) and rejects anything else with a message naming the field.
 - **TabCode export:** chords and tab written as TabCode text (`.tc`): one chord token per column using fret letter + course number pairs (e.g. `c1a2d3`), `|` for barlines, a newline per system; no rhythm signs (TabCode allows omitted rhythm). The exact diapason syntax is checked against the TabCode specification (Crawford/Wray, ECOLM) during implementation and covered by fixture tests.
-- SVG export of the lute chord boxes and the lute tab.
+- SVG export of the lute chord boxes (each titled with its chord name) and the lute tab.
 
 ## 10. PWA
-- `vite-plugin-pwa` with `registerType: 'autoUpdate'`, a manifest (name, icons, `display: standalone`, theme colour).
+- `vite-plugin-pwa` with `registerType: 'autoUpdate'`, a manifest (name, icons, `display: standalone`, theme colour). Icons: the SVG plus 192 px and 512 px PNGs, which Android needs to install the app. Android (Chrome) is the primary target; iPhone/iPad support is not a goal.
 - Workbox `maximumFileSizeToCacheInBytes` raised to 5 MB so the pdfjs worker is precached and PDF import works offline. pdfjs cMaps/standard fonts are not bundled; unusual PDFs may fail offline (documented).
 
 ## 11. Error handling summary
@@ -287,7 +291,9 @@ interface LuteResult { chords: LuteChord[]; tab: (LuteColumn | {kind:'bar'} | {k
 | Non-6-string block | Warning; block skipped |
 | PDF without text / notation-software PDF | Specific error message; extracted text placed in paste box |
 | Unplaceable note | Octave-shift or drop, whichever costs less (§6.4); both flagged |
-| Impossible pin | Pin removed, warning |
+| Impossible pin, or a pinned shape that is no longer playable | Pins ignored (still stored), warning per pin |
+| Unreadable stored piece | Listed; opening it shows the reason; left out of "All pieces" export with a note |
+| Damaged index | Rebuilt from the stored pieces; never stops the app from starting |
 | Storage quota | Banner; export still available |
 
 ## 12. Testing

@@ -1,6 +1,6 @@
 import type { LuteSettings, Notation } from '../core/model';
 import { LUTE_PRESETS, findPreset } from '../core/tunings';
-import { clampInt } from './util';
+import { IntField } from './IntField';
 
 export interface LuteSettingsBarProps {
   settings: LuteSettings;
@@ -32,24 +32,17 @@ export function LuteSettingsBar({ settings, hasOverrides, onChange, onEditTuning
       <button type="button" onClick={onEditTuning}>Edit tuning…</button>
       <label>
         Transpose
-        <input
-          type="number"
-          data-testid="transpose"
-          min={-12}
-          max={12}
-          value={settings.transpose}
-          onChange={(e) => onChange({ transpose: clampInt(e.target.value, -12, 12) })}
-        />
+        <IntField data-testid="transpose" min={-12} max={12} value={settings.transpose} onCommit={(n) => onChange({ transpose: n })} />
       </label>
       <button type="button" title="Keeps guitar shapes on a lute in G" onClick={() => onChange({ transpose: 3 })}>+3 guitar shapes</button>
       <button type="button" data-testid="auto-transpose" title="Pick the transpose that plays best" onClick={onAuto}>Auto</button>
       <label>
         Max fret
-        <input type="number" min={4} max={12} value={settings.maxFret} onChange={(e) => onChange({ maxFret: clampInt(e.target.value, 4, 12) })} />
+        <IntField data-testid="max-fret" min={4} max={12} value={settings.maxFret} onCommit={(n) => onChange({ maxFret: n })} />
       </label>
       <label>
         Max stretch
-        <input type="number" min={2} max={6} value={settings.maxStretch} onChange={(e) => onChange({ maxStretch: clampInt(e.target.value, 2, 6) })} />
+        <IntField data-testid="max-stretch" min={2} max={6} value={settings.maxStretch} onCommit={(n) => onChange({ maxStretch: n })} />
       </label>
       <label>
         Notation

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { initialPiece, safeLoad } from '../../src/ui/state';
 import { MemoryStorage, PieceStore } from '../../src/core/storage';
 import { newPiece } from '../../src/core/piece';
-import { clampInt, slug } from '../../src/ui/util';
+import { parseIntInRange, slug } from '../../src/ui/util';
 
 describe('state helpers', () => {
   it('starts with a new piece when storage is empty', () => {
@@ -29,11 +29,14 @@ describe('state helpers', () => {
 });
 
 describe('util', () => {
-  it('clamps integers from input strings', () => {
-    expect(clampInt('5', 0, 12)).toBe(5);
-    expect(clampInt('99', 0, 12)).toBe(12);
-    expect(clampInt('-3', 0, 12)).toBe(0);
-    expect(clampInt('abc', 2, 6)).toBe(2);
+  it('accepts only complete in-range integers while the user is typing', () => {
+    expect(parseIntInRange('', -12, 12)).toBeNull();
+    expect(parseIntInRange('-', -12, 12)).toBeNull();
+    expect(parseIntInRange('-3', -12, 12)).toBe(-3);
+    expect(parseIntInRange('1', 4, 12)).toBeNull(); // on the way to 10
+    expect(parseIntInRange('10', 4, 12)).toBe(10);
+    expect(parseIntInRange('40', 4, 12)).toBeNull();
+    expect(parseIntInRange('2.5', 0, 12)).toBeNull();
   });
   it('slugs titles for filenames', () => {
     expect(slug('  Greensleeves (arr.) ')).toBe('greensleeves-arr');

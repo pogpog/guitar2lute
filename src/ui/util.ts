@@ -1,7 +1,8 @@
-export function clampInt(v: string, lo: number, hi: number): number {
-  const n = Math.round(Number(v));
-  if (!Number.isFinite(n) || v.trim() === '') return lo;
-  return Math.min(hi, Math.max(lo, n));
+/** The integer a number field holds, or null while it is incomplete ('', '-', '1' on the way to '10') or out of range. */
+export function parseIntInRange(v: string, lo: number, hi: number): number | null {
+  if (!/^\s*-?\d+\s*$/.test(v)) return null;
+  const n = Number(v);
+  return n >= lo && n <= hi ? n : null;
 }
 
 export function slug(s: string): string {

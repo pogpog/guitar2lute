@@ -7,7 +7,7 @@ import { GuitarChordBox } from './GuitarChordBox';
 import { GuitarTabView } from './GuitarTabView';
 import { ImportDialog } from './ImportDialog';
 import { WarningsPanel } from './WarningsPanel';
-import { clampInt } from './util';
+import { IntField } from './IntField';
 
 export interface GuitarViewProps {
   piece: Piece;
@@ -39,7 +39,7 @@ export function GuitarView({ piece, update, flats, onPlayChord }: GuitarViewProp
         </label>
         <label>
           Capo
-          <input type="number" min={0} max={12} value={g.capo} onChange={(e) => update((p) => setCapo(p, clampInt(e.target.value, 0, 12)))} />
+          <IntField min={0} max={12} value={g.capo} onCommit={(n) => update((p) => setCapo(p, n))} />
         </label>
       </div>
 

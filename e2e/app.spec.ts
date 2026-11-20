@@ -66,3 +66,19 @@ test('works offline after the first visit', async ({ page, context }) => {
   await expect(page.getByText('Guitar → Lute')).toBeVisible();
   await expect(page.getByTestId('add-chord')).toBeVisible();
 });
+
+test('number fields can be typed digit by digit', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('view-lute').click();
+  const transpose = page.getByTestId('transpose');
+  await transpose.selectText();
+  await transpose.press('Backspace');
+  await transpose.pressSequentially('-3');
+  await transpose.blur();
+  await expect(transpose).toHaveValue('-3');
+  const maxFret = page.getByTestId('max-fret');
+  await maxFret.selectText();
+  await maxFret.pressSequentially('10');
+  await maxFret.blur();
+  await expect(maxFret).toHaveValue('10');
+});

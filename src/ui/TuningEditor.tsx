@@ -1,7 +1,7 @@
 import type { Tuning } from '../core/model';
 import { octaveOf, pcName, pitchClass, prettyName } from '../core/pitch';
 import { addBassCourse, removeBassCourse, setCoursePitch, setFrettedCourses } from '../core/tunings';
-import { clampInt } from './util';
+import { IntField } from './IntField';
 
 const PCS = Array.from({ length: 12 }, (_, i) => i);
 const OCTAVES = [0, 1, 2, 3, 4, 5];
@@ -49,12 +49,11 @@ export function TuningEditor({ tuning, onChange, onClose }: TuningEditorProps) {
         <button type="button" disabled={tuning.courses.length <= 6} onClick={() => onChange(removeBassCourse(tuning))}>− Remove bass course</button>
         <label>
           Fretted courses
-          <input
-            type="number"
+          <IntField
             min={1}
             max={tuning.courses.length}
             value={tuning.frettedCourses}
-            onChange={(e) => onChange(setFrettedCourses(tuning, clampInt(e.target.value, 1, tuning.courses.length)))}
+            onCommit={(n) => onChange(setFrettedCourses(tuning, n))}
           />
         </label>
         <button type="button" className="primary" onClick={onClose}>Done</button>

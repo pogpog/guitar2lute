@@ -1,0 +1,140 @@
+import type { Piece } from './model';
+import { SCHEMA_VERSION } from './model';
+
+export interface StorageLike {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+export interface PieceMeta { id: string; title: string; updatedAt: string; }
+
+export class MemoryStorage implements StorageLike {
+  private readonly map = new Map<string, string>();
+  getItem(key: string): string | null {
+    return this.map.has(key) ? this.map.get(key)! : null;
+  }
+  setItem(key: string, value: string): void {
+    this.map.set(key, value);
+  }
+  removeItem(key: string): void {
+    this.map.delete(key);
+  }
+}
+
+export function browserStorage(): StorageLike {
+  try {
+    const ls = window.localStorage;
+    ls.getItem('g2l:probe');
+    return ls;
+  } catch {
+    return new MemoryStorage();
+  }
+}
+
+const INDEX_KEY = 'g2l:index';
+const pieceKey = (id: string) => `g2l:piece:${id}`;
+
+function newerVersionError(v: number): Error {
+  return new Error(`This file was made by a newer version of the app (schema ${v}).`);
+}
+
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
+const isInt = (v: unknown): v is number => Number.isInteger(v);
+const isStringState = (v: unknown) => v === null || v === 'x' || (isInt(v) && v >= 0);
+const isPlacement = (v: unknown) => isObj(v) && isInt(v.course) && isInt(v.fret);
+const isTuning = (v: unknown) =>
+  isObj(v) && typeof v.id === 'string' && typeof v.name === 'string' &&
+  Array.isArray(v.courses) && v.courses.length > 0 && v.courses.every(isInt) && isInt(v.frettedCourses);
+const isEvent = (v: unknown) =>
+  isObj(v) &&
+  (v.kind === 'bar' || v.kind === 'break' ||
+    (v.kind === 'col' && isObj(v.col) && typeof v.col.x === 'number' && Array.isArray(v.col.notes) &&
+      v.col.notes.every((n) => isObj(n) && isInt(n.string) && isInt(n.fret))));
+const isChord = (v: unknown) =>
+  isObj(v) && typeof v.name === 'string' && isInt(v.baseFret) && Array.isArray(v.frets) && v.frets.length === 6 && v.frets.every(isStringState);
+const isRecordOf = (v: unknown, ok: (x: unknown) => boolean) => isObj(v) && Object.values(v).every(ok);
+
+/** Checks the whole structure, so data that parses but has the wrong shape never reaches the converter. */
+function invalidField(r: Obj): string | null {
+  if (typeof r.id !== 'string') return 'id';
+  if (typeof r.title !== 'string') return 'title';
+  const g = r.guitar;
+  if (!isObj(g)) return 'guitar';
+  if (!isTuning(g.tuning)) return 'guitar.tuning';
+  if (!isInt(g.capo) || g.capo < 0) return 'guitar.capo';
+  if (!Array.isArray(g.chords) || !g.chords.every(isChord)) return 'guitar.chords';
+  if (!Array.isArray(g.tab) || !g.tab.every(isEvent)) return 'guitar.tab';
+  const l = r.lute;
+  if (!isObj(l)) return 'lute';
+  if (!isTuning(l.tuning)) return 'lute.tuning';
+  for (const k of ['transpose', 'maxFret', 'maxStretch']) if (!isInt(l[k])) return `lute.${k}`;
+  if (!['french', 'italian', 'modern'].includes(l.notation as string)) return 'lute.notation';
+  const o = r.overrides;
+  if (!isObj(o)) return 'overrides';
+  if (!isRecordOf(o.chordVoicing, isInt)) return 'overrides.chordVoicing';
+  if (!isRecordOf(o.chordPins, (x) => isRecordOf(x, isPlacement))) return 'overrides.chordPins';
+  if (!isRecordOf(o.tabPins, (x) => isRecordOf(x, isPlacement))) return 'overrides.tabPins';
+  return null;
+}
+
+/** Validate and upgrade stored/imported data. Add migration steps here when SCHEMA_VERSION increases. */
+export function migrate(raw: unknown): Piece {
+  if (!isObj(raw)) throw new Error('Not a piece file.');
+  const v = raw.schemaVersion;
+  if (typeof v === 'number' && v > SCHEMA_VERSION) throw newerVersionError(v);
+  if (v !== SCHEMA_VERSION) throw new Error('Missing or unknown schemaVersion.');
+  const bad = invalidField(raw);
+  if (bad) throw new Error(`Invalid piece (${bad}).`);
+  return raw as unknown as Piece;
+}
+
+export class PieceStore {
+  constructor(private readonly storage: StorageLike) {}
+
+  list(): PieceMeta[] {
+    try {
+      const v: unknown = JSON.parse(this.storage.getItem(INDEX_KEY) ?? '[]');
+      return Array.isArray(v) ? v.filter((m): m is PieceMeta => !!m && typeof (m as PieceMeta).id === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+
+  load(id: string): Piece | null {
+    const text = this.storage.getItem(pieceKey(id));
+    return text === null ? null : migrate(JSON.parse(text));
+  }
+
+  save(p: Piece): void {
+    this.storage.setItem(pieceKey(p.id), JSON.stringify(p));
+    const list = this.list().filter((m) => m.id !== p.id);
+    list.unshift({ id: p.id, title: p.title, updatedAt: p.updatedAt });
+    this.storage.setItem(INDEX_KEY, JSON.stringify(list));
+  }
+
+  remove(id: string): void {
+    this.storage.removeItem(pieceKey(id));
+    this.storage.setItem(INDEX_KEY, JSON.stringify(this.list().filter((m) => m.id !== id)));
+  }
+}
+
+export function exportPieces(pieces: Piece[]): string {
+  return JSON.stringify({ schemaVersion: SCHEMA_VERSION, pieces }, null, 2);
+}
+
+export function importPieces(text: string): Piece[] {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('Not valid JSON.');
+  }
+  const d = data as { schemaVersion?: unknown; pieces?: unknown } | null;
+  if (d && Array.isArray(d.pieces)) {
+    if (typeof d.schemaVersion === 'number' && d.schemaVersion > SCHEMA_VERSION) throw newerVersionError(d.schemaVersion);
+    return d.pieces.map(migrate);
+  }
+  return [migrate(data)];
+}

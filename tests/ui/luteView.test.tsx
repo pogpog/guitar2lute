@@ -55,12 +55,12 @@ describe('LuteView tuning line', () => {
   it('spells out each course of the lute tuning', () => {
     const p = newPiece();
     const out = html(<LuteView piece={p} update={noop} result={convertPiece(p)} playing={null} onPlayChord={noop} />);
-    expect(text(out, 'lute-tuning-line')).toBe('Lute tuning: 1 G4 · 2 D4 · 3 A3 · 4 F3 · 5 C3 · 6 G2');
+    expect(text(out, 'lute-tuning-line')).toBe('Lute tuning: 6 G2 · 5 C3 · 4 F3 · 3 A3 · 2 D4 · 1 G4');
   });
   it('lists open bass courses as diapasons', () => {
     const p = newPiece();
     p.lute.tuning = findPreset('lute-8-g')!;
     const out = html(<LuteView piece={p} update={noop} result={convertPiece(p)} playing={null} onPlayChord={noop} />);
-    expect(text(out, 'lute-tuning-line')).toBe('Lute tuning: 1 G4 · 2 D4 · 3 A3 · 4 F3 · 5 C3 · 6 G2 · 7 F2 Diapasons: 8 D2');
+    expect(text(out, 'lute-tuning-line')).toBe('Lute tuning: Diapasons: 8 D2 Fretted: 7 F2 · 6 G2 · 5 C3 · 4 F3 · 3 A3 · 2 D4 · 1 G4');
   });
 });

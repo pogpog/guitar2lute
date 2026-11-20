@@ -220,16 +220,16 @@ test('edits the guitar tuning string by string', async ({ page }) => {
 
 test('spells out the lute and guitar tunings course by course', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByTestId('guitar-tuning-line')).toHaveText('Guitar tuning: 1 E4 · 2 B3 · 3 G3 · 4 D3 · 5 A2 · 6 E2');
+  await expect(page.getByTestId('guitar-tuning-line')).toHaveText('Guitar tuning: 6 E2 · 5 A2 · 4 D3 · 3 G3 · 2 B3 · 1 E4');
   await page.getByLabel('Guitar tuning').selectOption('guitar-drop-d');
-  await expect(page.getByTestId('guitar-tuning-line')).toContainText('6 D2');
+  await expect(page.getByTestId('guitar-tuning-line')).toContainText('6 D2 · 5 A2');
 
   await page.getByTestId('view-lute').click();
   const line = page.getByTestId('lute-tuning-line');
-  await expect(line).toHaveText('Lute tuning: 1 G4 · 2 D4 · 3 A3 · 4 F3 · 5 C3 · 6 G2');
+  await expect(line).toHaveText('Lute tuning: 6 G2 · 5 C3 · 4 F3 · 3 A3 · 2 D4 · 1 G4');
   await page.getByTestId('lute-tuning').selectOption('lute-8-g');
-  await expect(line).toHaveText('Lute tuning: 1 G4 · 2 D4 · 3 A3 · 4 F3 · 5 C3 · 6 G2 · 7 F2 Diapasons: 8 D2');
+  await expect(line).toHaveText('Lute tuning: Diapasons: 8 D2 Fretted: 7 F2 · 6 G2 · 5 C3 · 4 F3 · 3 A3 · 2 D4 · 1 G4');
   await page.getByRole('button', { name: 'Edit tuning…' }).click();
   await page.getByLabel('Course 1 note').selectOption({ label: 'F' });
-  await expect(line).toContainText('1 F4 ·');
+  await expect(line).toContainText('· 1 F4');
 });

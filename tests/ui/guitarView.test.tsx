@@ -71,6 +71,6 @@ describe('GuitarView tuning line', () => {
     p.guitar.tuning = findPreset('guitar-drop-d')!;
     const out = html(<GuitarView piece={p} update={noop} flats={false} onPlayChord={noop} />);
     const line = (/data-testid="guitar-tuning-line"[^>]*>(.*?)<\/p>/s.exec(out)?.[1] ?? '').replace(/<[^>]+>/g, '');
-    expect(line).toBe('Guitar tuning: 1 E4 · 2 B3 · 3 G3 · 4 D3 · 5 A2 · 6 D2');
+    expect(line).toBe('Guitar tuning: 6 D2 · 5 A2 · 4 D3 · 3 G3 · 2 B3 · 1 E4');
   });
 });

@@ -68,25 +68,29 @@ function scaleOf(score: TabScore, columns: Column[][]): { chars: number; units: 
 /**
  * Places every column and barline (spec §5.5 "Placement"); returns each measure's closing bar position.
  * A grace column aims 3 characters per slot before its note (after it, for an after-grace); a
- * measure's `|` aims one character before the next measure's start, so a grace on a downbeat goes
- * after the `|` and shifts the downbeat.
+ * measure's `|` aims one character before the next measure's first item, graces included, so a
+ * grace on a downbeat takes its room from the gap before, yet stays after the `|`, in its own bar.
  */
 function place(score: TabScore, columns: Column[][]): number[] {
   const { chars, units } = scaleOf(score, columns);
   const origin = score.measures.length > 0 ? score.measures[0].start : 0;
-  // The opening `|` is character 0, the bar before measure 1; measure 1 starts at character 1.
-  const at = (time: number) => 1 + Math.round(((time - origin) * chars) / units);
+  const at = (time: number) => Math.round(((time - origin) * chars) / units);
   const target = (c: Column) => at(c.time) + SLOT * c.slot;
+  const startOf = (i: number) => Math.min(at(score.measures[i].start), ...columns[i].map(target));
+  // The opening `|` is character 0, the bar before measure 1, so measure 1's first item (a grace,
+  // perhaps) sits at character 1.
+  const base = score.measures.length > 0 ? 1 - startOf(0) : 1;
   const bars: number[] = [];
   let end = 0; // last character used: a digit or a `|`
   let afterCol = false;
   score.measures.forEach((m, i) => {
     for (const col of columns[i]) {
-      col.x = Math.max(target(col), end + (afterCol ? 2 : 1));
+      col.x = Math.max(base + target(col), end + (afterCol ? 2 : 1));
       end = col.x + col.width - 1;
       afterCol = true;
     }
-    const bar = Math.max(at(m.start + m.length) - 1, end + 1);
+    const next = i + 1 < score.measures.length ? startOf(i + 1) : at(m.start + m.length);
+    const bar = Math.max(base + next - 1, end + 1);
     bars.push(bar);
     end = bar;
     afterCol = false;

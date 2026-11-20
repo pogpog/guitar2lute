@@ -186,16 +186,34 @@ describe('placement', () => {
     expect(bars).toEqual([48]);
   });
 
-  it('puts a grace before a downbeat after the barline, shifting the downbeat', () => {
+  it('keeps a grace before a downbeat in its own bar, moving the barline instead of the downbeat', () => {
     const measures = measuresOf([16, 16]);
     const main = notesAt(measures, [0, 8, ...every(16, 32, 1)]);
     const grace = notesAt(measures, [16], { slot: -1, string: 1, frets: [2] });
     const { xs, bars, events } = parsed(writeTabText(tabScore({ unit: 4, measures, notes: [...main, ...grace] })));
-    expect(xs.slice(0, 5)).toEqual([1, 25, 49, 51, 53]);
-    expect(xs[5]).toBe(55);
-    expect(bars).toEqual([48, 96]);
+    expect(xs.slice(0, 5)).toEqual([1, 25, 46, 49, 52]);
+    expect(bars).toEqual([45, 96]);
     const firstBar = events.findIndex((e) => e.kind === 'bar');
-    expect(events[firstBar + 1]).toMatchObject({ kind: 'col', col: { x: 49 } });
+    expect(events[firstBar + 1]).toMatchObject({ kind: 'col', col: { x: 46 } });
+  });
+
+  it('shifts a downbeat when the gap before has no room for its grace', () => {
+    const measures = measuresOf([16, 16]);
+    const main = notesAt(measures, every(0, 32, 1));
+    const grace = notesAt(measures, [16], { slot: -1, string: 1, frets: [2] });
+    const { xs, bars } = parsed(writeTabText(tabScore({ unit: 4, measures, notes: [...main, ...grace] })));
+    // the last 16th of bar 1 sits at 46: the barline goes straight after it, then grace, downbeat
+    expect(xs.slice(15, 20)).toEqual([46, 48, 50, 52, 55]);
+    expect(bars).toEqual([47, 96]);
+  });
+
+  it('starts the piece with a grace on the first note straight after the opening barline', () => {
+    const measures = measuresOf([16]);
+    const main = notesAt(measures, every(0, 16, 1));
+    const grace = notesAt(measures, [0], { slot: -1, string: 1, frets: [2] });
+    const { xs, bars } = parsed(writeTabText(tabScore({ unit: 4, measures, notes: [...main, ...grace] })));
+    expect(xs.slice(0, 3)).toEqual([1, 4, 7]);
+    expect(bars).toEqual([51]);
   });
 });
 

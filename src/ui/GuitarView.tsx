@@ -9,6 +9,7 @@ import { GuitarTabView } from './GuitarTabView';
 import { ImportDialog } from './ImportDialog';
 import { WarningsPanel } from './WarningsPanel';
 import { IntField } from './IntField';
+import { GuitarTuningEditor } from './GuitarTuningEditor';
 
 export interface GuitarViewProps {
   piece: Piece;
@@ -21,6 +22,7 @@ export interface GuitarViewProps {
 
 export function GuitarView({ piece, update, flats, playing = null, onPlayChord }: GuitarViewProps) {
   const [importing, setImporting] = useState(false);
+  const [editingTuning, setEditingTuning] = useState(false);
   // Recomputed from the stored source text (parsing is deterministic), so the last import's
   // warnings survive switching views and reloading.
   const source = piece.guitar.sourceText;
@@ -43,11 +45,19 @@ export function GuitarView({ piece, update, flats, playing = null, onPlayChord }
             {!isPreset && <option value={g.tuning.id}>{g.tuning.name}</option>}
           </select>
         </label>
+        <button type="button" data-testid="edit-guitar-tuning" onClick={() => setEditingTuning((e) => !e)}>Edit tuning…</button>
         <label>
           Capo
           <IntField min={0} max={12} value={g.capo} onCommit={(n) => update((p) => setCapo(p, n))} />
         </label>
       </div>
+      {editingTuning && (
+        <GuitarTuningEditor
+          tuning={g.tuning}
+          onChange={(t) => update((p) => setGuitarTuning(p, t))}
+          onClose={() => setEditingTuning(false)}
+        />
+      )}
 
       <h2>Chord boxes</h2>
       <div className="chord-grid">

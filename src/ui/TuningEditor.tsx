@@ -1,10 +1,7 @@
 import type { Tuning } from '../core/model';
-import { octaveOf, pcName, pitchClass, prettyName } from '../core/pitch';
 import { addBassCourse, removeBassCourse, setCoursePitch, setFrettedCourses } from '../core/tunings';
 import { IntField } from './IntField';
-
-const PCS = Array.from({ length: 12 }, (_, i) => i);
-const OCTAVES = [0, 1, 2, 3, 4, 5];
+import { PitchPicker } from './PitchPicker';
 
 export interface TuningEditorProps { tuning: Tuning; onChange: (t: Tuning) => void; onClose: () => void; }
 
@@ -21,24 +18,7 @@ export function TuningEditor({ tuning, onChange, onClose }: TuningEditorProps) {
           {tuning.courses.map((m, c) => (
             <tr key={c}>
               <td>{c + 1}</td>
-              <td>
-                <select
-                  aria-label={`Course ${c + 1} note`}
-                  value={pitchClass(m)}
-                  onChange={(e) => onChange(setCoursePitch(tuning, c, (octaveOf(m) + 1) * 12 + Number(e.target.value)))}
-                >
-                  {PCS.map((pc) => <option key={pc} value={pc}>{prettyName(pcName(pc, true))}</option>)}
-                </select>
-              </td>
-              <td>
-                <select
-                  aria-label={`Course ${c + 1} octave`}
-                  value={octaveOf(m)}
-                  onChange={(e) => onChange(setCoursePitch(tuning, c, (Number(e.target.value) + 1) * 12 + pitchClass(m)))}
-                >
-                  {OCTAVES.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </td>
+              <PitchPicker label={`Course ${c + 1}`} pitch={m} onChange={(x) => onChange(setCoursePitch(tuning, c, x))} />
               <td>{c < tuning.frettedCourses ? 'fretted' : 'open (diapason)'}</td>
             </tr>
           ))}

@@ -193,3 +193,27 @@ test('keeps import warnings after switching views and reloading', async ({ page 
   await page.reload();
   await expect(items).toHaveText(text);
 });
+
+test('edits the guitar tuning string by string', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('add-chord').click();
+  const box = page.getByTestId('guitar-chordbox').first();
+  await box.getByTestId('open-5').click(); // low string open
+  await expect(box.locator('figcaption')).toHaveText('E');
+
+  await page.getByTestId('edit-guitar-tuning').click();
+  const editor = page.getByTestId('guitar-tuning-editor');
+  await editor.getByLabel('String 6 note').selectOption({ label: 'D' });
+  await expect(page.getByLabel('Guitar tuning')).toHaveValue('guitar-drop-d');
+  await expect(box.locator('figcaption')).toHaveText('D');
+
+  await editor.getByLabel('String 5 note').selectOption({ label: 'G' });
+  await expect(page.getByLabel('Guitar tuning')).toHaveValue('guitar-custom');
+  await expect(page.getByLabel('Guitar tuning').locator('option:checked')).toHaveText('Custom (D G D G B E)');
+  await editor.getByRole('button', { name: 'Done' }).click();
+  await expect(editor).toHaveCount(0);
+
+  await page.waitForTimeout(800); // autosave debounce
+  await page.reload();
+  await expect(page.getByLabel('Guitar tuning').locator('option:checked')).toHaveText('Custom (D G D G B E)');
+});

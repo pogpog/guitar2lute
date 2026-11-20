@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { html, noop } from './render';
 import { ImportDialog } from '../../src/ui/ImportDialog';
 import { GuitarView } from '../../src/ui/GuitarView';
+import { GuitarTuningEditor } from '../../src/ui/GuitarTuningEditor';
+import { findPreset } from '../../src/core/tunings';
 import { newPiece } from '../../src/core/piece';
 import { addChord, applyImport } from '../../src/core/edit';
 import { importTabText } from '../../src/core/parse/importText';
@@ -40,5 +42,25 @@ describe('GuitarView', () => {
     expect(out).toContain('data-testid="add-chord"');
     expect(out).toContain('data-testid="open-import"');
     expect(out).toContain('No tab yet');
+  });
+});
+
+describe('GuitarTuningEditor', () => {
+  it('shows a note and octave for each of the six strings, high to low', () => {
+    const out = html(<GuitarTuningEditor tuning={findPreset('guitar-drop-d')!} onChange={noop} onClose={noop} />);
+    expect(out).toContain('data-testid="guitar-tuning-editor"');
+    expect(out.match(/<tr>/g)).toHaveLength(7);
+    expect(out).toContain('aria-label="String 1 note"');
+    expect(out).toContain('aria-label="String 6 octave"');
+    // string 6 is D2: note D (pitch class 2) and octave 2 selected
+    expect(out).toMatch(/aria-label="String 6 note"[^>]*>(?:(?!<\/select>).)*<option value="2" selected=""/s);
+    expect(out).toMatch(/aria-label="String 6 octave"[^>]*>(?:(?!<\/select>).)*<option value="2" selected=""/s);
+  });
+});
+
+describe('GuitarView tuning', () => {
+  it('offers to edit the guitar tuning', () => {
+    const out = html(<GuitarView piece={newPiece()} update={noop} flats={false} onPlayChord={noop} />);
+    expect(out).toContain('data-testid="edit-guitar-tuning"');
   });
 });

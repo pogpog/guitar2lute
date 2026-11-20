@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   LUTE_PRESETS, GUITAR_PRESETS, findPreset, guitarTuningByName, inferGuitarTuning,
-  addBassCourse, removeBassCourse, setCoursePitch, setFrettedCourses,
+  addBassCourse, removeBassCourse, setCoursePitch, setFrettedCourses, setGuitarStringPitch,
 } from '../../src/core/tunings';
 
 describe('tuning presets', () => {
@@ -62,5 +62,23 @@ describe('tuning edits', () => {
   it('edits course pitch and fretted count', () => {
     expect(setCoursePitch(six, 5, 41).courses[5]).toBe(41);
     expect(setFrettedCourses(six, 3).frettedCourses).toBe(3);
+  });
+});
+
+describe('guitar string edits', () => {
+  const std = findPreset('guitar-standard')!;
+  it('names a non-preset tuning by its notes, low to high', () => {
+    const t = setGuitarStringPitch(std, 4, 43); // A2 -> G2
+    expect(t.id).toBe('guitar-custom');
+    expect(t.name).toBe('Custom (E G D G B E)');
+    expect(t.courses).toEqual([64, 59, 55, 50, 43, 40]);
+    expect(t.frettedCourses).toBe(6);
+    expect(std.courses[4]).toBe(45);
+  });
+  it('becomes the preset when the strings match one', () => {
+    const dropD = setGuitarStringPitch(std, 5, 38);
+    expect(dropD.id).toBe('guitar-drop-d');
+    expect(dropD.name).toBe('Drop D');
+    expect(setGuitarStringPitch(dropD, 5, 40).id).toBe('guitar-standard');
   });
 });

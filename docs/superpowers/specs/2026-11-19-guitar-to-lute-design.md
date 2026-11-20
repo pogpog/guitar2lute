@@ -171,7 +171,7 @@ All glyph mappings live in one table in `notation.ts` so period letter forms (e.
 - "+ Add chord" appends a new empty box; delete and reorder buttons on each box.
 
 ### 5.2 Guitar tuning and capo
-Piece-level selector for guitar input tuning (presets + custom) and capo (0–12). Capo adds semitones to every guitar pitch (tab frets are relative to the capo). Both are auto-filled from tab headers/labels on import, and the user can override them.
+Piece-level selector for guitar input tuning (presets + custom) and capo (0–12). "Edit tuning…" opens a six-string editor (note and octave per string, starting from the current tuning); a tuning that matches a preset becomes that preset, any other is named by its notes from low to high ("Custom (D G D G B E)"). Capo adds semitones to every guitar pitch (tab frets are relative to the capo). Both are auto-filled from tab headers/labels on import, and the user can override them.
 
 ### 5.3 Text import (`normalize.ts`, `headers.ts`, `asciiTab.ts`)
 1. **Normalize:** CRLF → LF; expand tab characters to 8-column stops; NBSP → space; Unicode dashes (– — ‐ − ‒) → `-`; `‖`, `|:`, `:|`, `*|`, `|*` → `|`.
@@ -261,7 +261,7 @@ interface LuteResult { chords: LuteChord[]; tab: (LuteColumn | {kind:'bar'} | {k
 
 - **Header:** piece title (editable), Guitar | Lute toggle, Import, Export (JSON / TabCode / SVG / Print), playback controls.
 - **Sidebar (minimal):** list of saved pieces (title, updated date), New, Delete; collapses to a menu on narrow screens.
-- **Guitar view:** tuning + capo selectors; chord box grid with "+ Add chord"; tab view (wrapped systems rendered from the model, monospace style); warnings panel.
+- **Guitar view:** tuning selector + Edit tuning… + capo; chord box grid with "+ Add chord"; tab view (wrapped systems rendered from the model, monospace style); warnings panel.
 - **Lute view:** settings bar (tuning preset, Edit tuning…, transpose + "+3 guitar shapes" + "Auto", max fret, max stretch, notation selector, Clear overrides); lute chord box grid with ◀ ▶ to step through the 3 voicings; lute tab view; warnings panel (shifted notes, dropped notes, broken pins).
 - **Lute tab rendering:** SVG, wrapped into systems at the source `break` events (or by width); horizontal spacing proportional to the source column `x` offsets (keeps rough rhythm spacing); bar lines carried across; octave-shifted notes marked with a small dot above the glyph; pinned notes with an underline; the currently playing column highlighted.
 - **Responsive:** usable at phone width (chord grid wraps, tab scrolls horizontally inside its panel).

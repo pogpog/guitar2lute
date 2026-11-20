@@ -58,7 +58,13 @@ src/
     pdfText.ts          # text items → reconstructed monospace text; notation-PDF detection
     sniff.ts            # PDF / compressed MusicXML / MusicXML / plain text detection from the file's bytes
     unzip.ts            # minimal .zip reader for .mxl (DecompressionStream, no dependency)
-    musicxml.ts         # MusicXML tab staff → ASCII tab text with Tuning/Capo headers
+    openFile.ts         # opened file bytes → paste-box text + notices, or a message (every file kind)
+    musicxml/           # MusicXML tab staff → ASCII tab text with Tuning/Capo headers
+      xml.ts            # parseXml (damaged-file handling), ImportError, DOM helpers
+      read.ts           # document → TabScore: staff, tuning, time, notes, capo, checks, notices
+      capo.ts           # capo text matching ("Capo III", "capo at fret 3")
+      write.ts          # TabScore → ASCII tab text, spaced by time, in lute-line-sized blocks
+      index.ts          # musicXmlToTabText(xmlText, parser)
   audio/
     pluck.ts            # WebAudio Karplus-Strong pluck + scheduler
   ui/                   # React components

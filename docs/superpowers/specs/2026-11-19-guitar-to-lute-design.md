@@ -213,11 +213,11 @@ Piece-level selector for guitar input tuning (presets + custom) and capo (0–12
 - **Detection:** if the text contains fret digits but no dash runs (`-{3,}`) on candidate lines, show a specific error: "This PDF looks like it was produced by notation software (Guitar Pro/MuseScore). Only PDFs of plain-text tab are supported in this version." Also put the extracted text in the paste box.
 - Any parse warnings: the extracted text is placed in the paste box for manual correction.
 
-### 5.5 MusicXML import (`import/sniff.ts`, `import/unzip.ts`, `import/musicxml.ts`)
+### 5.5 MusicXML import (`import/sniff.ts`, `import/unzip.ts`, `import/musicxml/`)
 MusicXML is the exchange format MuseScore and most notation programs export. Unlike a PDF it records each tab note's string and fret, the tuning and the rhythm. The design was reviewed before implementation (`docs/superpowers/reviews/2026-11-20-musicxml-spec-review.md`); the rules below follow that review.
 
 **Opening a file**
-- The import dialog's file button is "Open file…" (PDF, MusicXML or text). It has no file-type filter, because Android's picker greys out `.mxl` files it has no type for. `musicxml.ts` and `unzip.ts` are lazy-loaded, like `pdf.ts`. Notices from a previous file are cleared when another file is opened.
+- The import dialog's file button is "Open file…" (PDF, MusicXML or text). It has no file-type filter, because Android's picker greys out `.mxl` files it has no type for. `musicxml/` and `unzip.ts` are lazy-loaded, like `pdf.ts`. Notices from a previous file are cleared when another file is opened.
 - `sniff.ts` decides from the bytes, never the file name:
   - `%PDF` within the first 1024 bytes → PDF import (§5.4).
   - `PK\x03\x04` at byte 0 → zip, read as compressed MusicXML (`.mxl`).

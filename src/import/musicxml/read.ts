@@ -51,7 +51,8 @@ const BAD_STRING: BarWording = (count, bars) =>
   `${count} ${count === 1 ? 'note' : 'notes'} on a string outside 1–6 ${count === 1 ? 'was' : 'were'} skipped (${bars}).`;
 const CLASH: BarWording = (count, bars) =>
   `${count} ${count === 1 ? 'place had' : 'places had'} two notes on one string; the first was kept (${bars}).`;
-const TIMING: BarWording = (_count, bars) => `Timing in ${bars} went before the start of the bar and was corrected.`;
+const TIMING: BarWording = (_count, bars) =>
+  `Timing in ${bars} was corrected (a duration was negative or went before the start of the bar).`;
 
 interface BarItem {
   wording: BarWording;
@@ -125,6 +126,11 @@ function partNames(root: Element): Map<string, string> {
   return names;
 }
 
+/** The `<staff-details>` for a staff: the one numbered for it, else one with no `number`. */
+function pickDetails(all: Element[], staff: number): Element | null {
+  return all.find((d) => hasNumber(d) && staffOf(d) === staff) ?? all.find((d) => !hasNumber(d)) ?? null;
+}
+
 /** First TAB-clef staff with 6 strings (spec §5.5 "Which staff"); the first clef and staff-details of each staff count. */
 function findTabStaff(root: Element, notices: Notices): TabStaff {
   const names = partNames(root);
@@ -138,7 +144,7 @@ function findTabStaff(root: Element, notices: Notices): TabStaff {
     for (let staff = 1; staff <= staves; staff++) {
       const clef = clefs.find((c) => staffOf(c) === staff);
       if (!clef || childText(clef, 'sign') !== 'TAB') continue;
-      const details = allDetails.find((d) => !hasNumber(d) || staffOf(d) === staff) ?? null;
+      const details = pickDetails(allDetails, staff);
       const tunings = details ? childElements(details, 'staff-tuning').length : 0;
       const lines = details ? numberText(details, 'staff-lines') : null;
       const strings = tunings || (lines ?? 5);
@@ -261,7 +267,7 @@ function tabNote(
   const technical = technicalOf(note);
   const string = technical ? numberText(technical, 'string') : null;
   const fret = technical ? numberText(technical, 'fret') : null;
-  if (!technical || string === null || fret === null) {
+  if (!technical || string === null || fret === null || !Number.isInteger(string) || !Number.isInteger(fret) || fret < 0) {
     notices.inBar(NO_STRING_FRET, bar);
     return null;
   }
@@ -463,7 +469,7 @@ function laterChanges(tab: TabStaff, notices: Notices): void {
   for (const [index, measure] of childElements(tab.part, 'measure').entries()) {
     for (const attrs of childElements(measure, 'attributes')) {
       const clef = childElements(attrs, 'clef').find((c) => staffOf(c) === tab.staff);
-      const details = childElements(attrs, 'staff-details').find((d) => !hasNumber(d) || staffOf(d) === tab.staff);
+      const details = pickDetails(childElements(attrs, 'staff-details'), tab.staff);
       const capo = details ? numberText(details, 'capo') : null;
       const tuning = details ? tuningOf(details) : '';
       const changed =

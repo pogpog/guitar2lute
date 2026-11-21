@@ -68,6 +68,12 @@ describe('notes that take time but make none', () => {
 });
 
 describe('skipped notes', () => {
+  it('counts a non-integer string or fret, or a negative fret, as without string/fret', () => {
+    const s = one(n({ s: 2.5, f: 0 }) + n({ s: 1, f: 2.5 }) + n({ s: 1, f: -1 }) + n({ s: 1, f: 3 }));
+    expect(s.notices).toEqual(['3 notes without string/fret were skipped (bar 1).']);
+    expect(placed(s)).toEqual([[3, 0, 0, 3]]);
+  });
+
   it('notes without string/fret', () => {
     const s = tab([tabAttrs() + n({}) + n({ s: 1 }), n({ f: 2 }) + n({ s: 1, f: 0 })]);
     expect(s.notices).toEqual(['3 notes without string/fret were skipped (bars 1, 2).']);

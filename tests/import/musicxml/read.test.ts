@@ -96,6 +96,21 @@ describe('which staff', () => {
     expect(placed(s)).toEqual([[0, 5, 0]]);
   });
 
+  it('prefers the staff-details numbered for the tab staff over an unnumbered one before it', () => {
+    const tunings = ['D2', 'A2', 'D3', 'G3', 'B3', 'E4']
+      .map((p, i) => `<staff-tuning line="${i + 1}"><tuning-step>${p[0]}</tuning-step><tuning-octave>${p[1]}</tuning-octave></staff-tuning>`)
+      .join('');
+    const attrs =
+      '<attributes><divisions>1</divisions><staves>2</staves>' +
+      '<clef number="1"><sign>G</sign><line>2</line></clef>' +
+      '<clef number="2"><sign>TAB</sign><line>5</line></clef>' +
+      '<staff-details print-object="yes"/>' +
+      `<staff-details number="2">${tunings}</staff-details></attributes>`;
+    const s = tab([attrs + n({ pitch: 'C4', d: 4, staff: 1 }) + backup(4) + n({ s: 6, f: 0, d: 4, staff: 2 })]);
+    expect(s.tuning).toEqual([64, 59, 55, 50, 45, 38]);
+    expect(placed(s)).toEqual([[0, 5, 0]]);
+  });
+
   it('skips a 4-string tab staff before a 6-string one', () => {
     const s = read(
       score([
@@ -251,7 +266,7 @@ describe('time', () => {
       [4, 5, 0],
     ]);
     expect(s.measures[1]).toEqual({ number: '2', start: 4, length: 4, newBlock: false });
-    expect(s.notices).toEqual(['Timing in bar 2 went before the start of the bar and was corrected.']);
+    expect(s.notices).toEqual(['Timing in bar 2 was corrected (a duration was negative or went before the start of the bar).']);
   });
 
   it('clamps a negative duration', () => {
@@ -261,7 +276,15 @@ describe('time', () => {
       [2, 0, 1],
       [2, 1, 2],
     ]);
-    expect(s.notices).toEqual(['Timing in bar 1 went before the start of the bar and was corrected.']);
+    expect(s.notices).toEqual(['Timing in bar 1 was corrected (a duration was negative or went before the start of the bar).']);
+  });
+});
+
+describe('timing notice', () => {
+  it('names every bar in the plural', () => {
+    const bad = n({ s: 1, f: 1, d: 2 }) + backup(3) + n({ s: 6, f: 0, d: 4, v: 2 });
+    const s = tab([tabAttrs() + n({ s: 1, f: 0, d: 4 }), bad, n({ s: 1, f: 0, d: 4 }), bad]);
+    expect(s.notices).toEqual(['Timing in bars 2, 4 was corrected (a duration was negative or went before the start of the bar).']);
   });
 });
 

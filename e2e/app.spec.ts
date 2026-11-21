@@ -1,3 +1,6 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { makeTextPdf } from './helpers/pdf';
 import { TINY_SCORE, tinyMxl } from './helpers/mxl';
@@ -61,10 +64,12 @@ test('opens a MusicXML .mxl', async ({ page }) => {
   await page.getByTestId('open-import').click();
   await page.getByTestId('import-file').setInputFiles({ name: 'song.mxl', mimeType: 'application/vnd.recordare.musicxml', buffer: tinyMxl() });
   const box = page.getByTestId('import-text');
-  await expect(box).toHaveValue(/^Tuning: E2 A2 D3 G3 B3 E4/);
+  await expect(box).toHaveValue(/^Tuning: D2 A2 D3 G3 B3 E4/);
   await expect(box).toHaveValue(/Capo: 3/);
+  await expect(page.getByTestId('import-notices')).toHaveCount(0);
   await page.getByTestId('do-import').click();
   await expect(page.getByLabel('Capo')).toHaveValue('3');
+  await expect(page.getByLabel('Guitar tuning')).toHaveValue('guitar-drop-d');
   await expect(page.getByTestId('guitar-tab')).toBeVisible();
 });
 
@@ -81,6 +86,19 @@ test('re-opening import shows the generated tab', async ({ page }) => {
   await expect(page.getByTestId('import-text')).toHaveValue(generated);
   await page.getByTestId('do-import').click();
   await expect(page.getByTestId('guitar-tab').locator('pre')).toHaveText(tab!);
+});
+
+test('refuses a file over 100 MB and keeps the paste box', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('open-import').click();
+  await page.getByTestId('import-text').fill('keep me');
+  // A sparse file: Playwright rejects in-memory buffers over 50 MB.
+  const big = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'g2l-')), 'big.mp4');
+  fs.writeFileSync(big, '');
+  fs.truncateSync(big, 100 * 1024 * 1024 + 1);
+  await page.getByTestId('import-file').setInputFiles(big);
+  await expect(page.getByRole('alert')).toHaveText('This file is too large to open (over 100 MB).');
+  await expect(page.getByTestId('import-text')).toHaveValue('keep me');
 });
 
 test('a damaged .musicxml shows the damaged-file message', async ({ page }) => {

@@ -2,12 +2,12 @@ import { makeZip } from '../../tests/helpers/zip';
 
 export { makeZip };
 
-const TUNING = ['E2', 'A2', 'D3', 'G3', 'B3', 'E4'];
+const TUNING = ['D2', 'A2', 'D3', 'G3', 'B3', 'E4'];
 
-const note = (s: number, f: number) =>
-  `<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><notations><technical><string>${s}</string><fret>${f}</fret></technical></notations></note>`;
+const note = (s: number, f: number, step: string, octave: number) =>
+  `<note><pitch><step>${step}</step><octave>${octave}</octave></pitch><duration>1</duration><voice>1</voice><notations><technical><string>${s}</string><fret>${f}</fret></technical></notations></note>`;
 
-/** A tiny hand-written tab score: standard tuning, "Capo III", four quarter notes. */
+/** A tiny hand-written tab score: drop-D tuning, "Capo III", four quarter notes. */
 export const TINY_SCORE =
   '<?xml version="1.0" encoding="UTF-8"?>' +
   '<score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Guitar</part-name></score-part></part-list>' +
@@ -16,7 +16,7 @@ export const TINY_SCORE =
   TUNING.map((t, i) => `<staff-tuning line="${i + 1}"><tuning-step>${t[0]}</tuning-step><tuning-octave>${t[1]}</tuning-octave></staff-tuning>`).join('') +
   '</staff-details></attributes>' +
   '<direction placement="above"><direction-type><words>Capo III</words></direction-type></direction>' +
-  note(5, 0) + note(3, 2) + note(2, 1) + note(1, 0) +
+  note(5, 0, 'A', 2) + note(3, 2, 'A', 3) + note(2, 1, 'C', 4) + note(1, 0, 'E', 4) +
   '</measure></part></score-partwise>';
 
 export function tinyMxl(): Buffer {

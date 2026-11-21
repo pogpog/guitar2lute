@@ -2,6 +2,10 @@ import { useMemo, useRef, useState } from 'react';
 import { importTabText, type TextImport } from '../core/parse/importText';
 import { WarningsPanel } from './WarningsPanel';
 
+/** Larger files are refused before reading: a picked video would stall the tab. */
+export const MAX_FILE_BYTES = 100 * 1024 * 1024;
+const TOO_BIG = 'This file is too large to open (over 100 MB).';
+
 export interface ImportDialogProps {
   initialText: string;
   hasPins: boolean;
@@ -19,6 +23,11 @@ export function ImportDialog({ initialText, hasPins, onImport, onClose }: Import
   const cols = preview.events.filter((e) => e.kind === 'col').length;
 
   const onFile = async (file: File) => {
+    if (file.size > MAX_FILE_BYTES) {
+      setMessage(TOO_BIG);
+      setNotices([]);
+      return;
+    }
     setBusy(true);
     setMessage(null);
     setNotices([]);

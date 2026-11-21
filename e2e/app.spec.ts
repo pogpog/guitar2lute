@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { makeTextPdf } from './helpers/pdf';
+import { TINY_SCORE, tinyMxl } from './helpers/mxl';
 
 const TAB = [
   'e|-------0---|',
@@ -45,11 +46,60 @@ test('enter a chord, import tab, convert to lute and override a note', async ({ 
 test('imports a text-based PDF', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('open-import').click();
-  await page.getByTestId('pdf-input').setInputFiles({
+  await page.getByTestId('import-file').setInputFiles({
     name: 'tab.pdf',
     mimeType: 'application/pdf',
     buffer: makeTextPdf(['My Song', '', ...TAB]),
   });
+  await expect(page.getByTestId('import-text')).toHaveValue(/e\|-------0---\|/);
+  await page.getByTestId('do-import').click();
+  await expect(page.getByTestId('guitar-tab')).toBeVisible();
+});
+
+test('opens a MusicXML .mxl', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('open-import').click();
+  await page.getByTestId('import-file').setInputFiles({ name: 'song.mxl', mimeType: 'application/vnd.recordare.musicxml', buffer: tinyMxl() });
+  const box = page.getByTestId('import-text');
+  await expect(box).toHaveValue(/^Tuning: E2 A2 D3 G3 B3 E4/);
+  await expect(box).toHaveValue(/Capo: 3/);
+  await page.getByTestId('do-import').click();
+  await expect(page.getByLabel('Capo')).toHaveValue('3');
+  await expect(page.getByTestId('guitar-tab')).toBeVisible();
+});
+
+test('re-opening import shows the generated tab', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('open-import').click();
+  await page.getByTestId('import-file').setInputFiles({ name: 'song.mxl', mimeType: 'application/vnd.recordare.musicxml', buffer: tinyMxl() });
+  const box = page.getByTestId('import-text');
+  await expect(box).toHaveValue(/Capo: 3/);
+  const generated = await box.inputValue();
+  await page.getByTestId('do-import').click();
+  const tab = await page.getByTestId('guitar-tab').locator('pre').textContent();
+  await page.getByTestId('open-import').click();
+  await expect(page.getByTestId('import-text')).toHaveValue(generated);
+  await page.getByTestId('do-import').click();
+  await expect(page.getByTestId('guitar-tab').locator('pre')).toHaveText(tab!);
+});
+
+test('a damaged .musicxml shows the damaged-file message', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('open-import').click();
+  await page.getByTestId('import-text').fill('keep me');
+  await page.getByTestId('import-file').setInputFiles({
+    name: 'broken.musicxml',
+    mimeType: 'application/xml',
+    buffer: Buffer.from(TINY_SCORE.slice(0, 400)),
+  });
+  await expect(page.getByRole('alert')).toContainText('Could not read this MusicXML file; it may be damaged.');
+  await expect(page.getByTestId('import-text')).toHaveValue('keep me');
+});
+
+test('a .txt tab file lands in the paste box', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('open-import').click();
+  await page.getByTestId('import-file').setInputFiles({ name: 'tab.txt', mimeType: 'text/plain', buffer: Buffer.from(TAB.join('\n')) });
   await expect(page.getByTestId('import-text')).toHaveValue(/e\|-------0---\|/);
   await page.getByTestId('do-import').click();
   await expect(page.getByTestId('guitar-tab')).toBeVisible();

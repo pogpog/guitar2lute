@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
 import { importTabText, type TextImport } from '../core/parse/importText';
-import { looksLikeNotationPdf, NOTATION_PDF_MESSAGE } from '../import/pdfText';
 import { WarningsPanel } from './WarningsPanel';
 
 export interface ImportDialogProps {
@@ -12,23 +11,32 @@ export interface ImportDialogProps {
 
 export function ImportDialog({ initialText, hasPins, onImport, onClose }: ImportDialogProps) {
   const [text, setText] = useState(initialText);
-  const [pdfMessage, setPdfMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [notices, setNotices] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const preview = useMemo(() => importTabText(text), [text]);
   const cols = preview.events.filter((e) => e.kind === 'col').length;
 
-  const onPdf = async (file: File) => {
+  const onFile = async (file: File) => {
     setBusy(true);
-    setPdfMessage(null);
+    setMessage(null);
+    setNotices([]);
     try {
-      const { extractPdfText } = await import('../import/pdf');
-      const extracted = await extractPdfText(await file.arrayBuffer());
-      if (!extracted.trim()) setPdfMessage('No text found in this PDF. Scanned (image) PDFs are not supported.');
-      else if (looksLikeNotationPdf(extracted)) setPdfMessage(NOTATION_PDF_MESSAGE);
-      setText(extracted);
+      const { openImportFile } = await import('../import/openFile');
+      const opened = await openImportFile(new Uint8Array(await file.arrayBuffer()), {
+        parser: new DOMParser(),
+        extractPdfText: async (d) => (await import('../import/pdf')).extractPdfText(d),
+      });
+      if (!opened.ok) {
+        setMessage(opened.message);
+        return;
+      }
+      setText(opened.text);
+      setNotices(opened.notices);
+      setMessage(opened.message || null);
     } catch (e) {
-      setPdfMessage(`Could not read this PDF: ${(e as Error).message}`);
+      setMessage(`Could not read this file: ${(e as Error).message}`);
     } finally {
       setBusy(false);
     }
@@ -57,7 +65,7 @@ export function ImportDialog({ initialText, hasPins, onImport, onClose }: Import
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Import guitar tab">
       <div className="modal">
         <h2>Import guitar tab</h2>
-        <p className="muted">Paste plain-text tab, or upload a PDF that contains plain-text tab.</p>
+        <p className="muted">Paste plain-text tab, or open a file: a PDF of plain-text tab, a MusicXML file with a tab staff (.musicxml, .mxl), or a text file.</p>
         <textarea
           ref={ref}
           data-testid="import-text"
@@ -65,25 +73,30 @@ export function ImportDialog({ initialText, hasPins, onImport, onClose }: Import
           onChange={(e) => setText(e.target.value)}
           rows={16}
           spellCheck={false}
+          wrap="off"
           aria-label="Tab text"
         />
         <div className="row">
           <label className="file-button">
-            Upload PDF
+            Open file…
             <input
               type="file"
-              accept="application/pdf,.pdf"
-              data-testid="pdf-input"
+              data-testid="import-file"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) void onPdf(f);
+                if (f) void onFile(f);
                 e.target.value = '';
               }}
             />
           </label>
-          {busy && <span className="muted">Reading PDF…</span>}
+          {busy && <span className="muted">Reading file…</span>}
         </div>
-        {pdfMessage && <p className="error" role="alert">{pdfMessage}</p>}
+        {notices.length > 0 && (
+          <ul className="muted" data-testid="import-notices">
+            {notices.map((n, i) => <li key={i}>{n}</li>)}
+          </ul>
+        )}
+        {message && <p className="error" role="alert">{message}</p>}
         <p className="muted">{summary}</p>
         <WarningsPanel warnings={preview.warnings} onSelect={(w) => w.line && selectLine(w.line)} />
         <div className="row end">

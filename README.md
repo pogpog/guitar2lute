@@ -44,6 +44,10 @@ Android only offers to install the app, and the app only works offline, when it 
 
 Pieces are saved automatically in the browser you use, so they stay on that device and in that browser profile. Clearing the site's data deletes them. To back them up, use the **Export…** menu at the top (**This piece (JSON)** or **All pieces (JSON)**), and **Import JSON** to load a backup into another browser or device.
 
+## Importing tab
+
+Besides pasted text and PDFs of plain-text tab, **Import tab…** opens MusicXML files (`.musicxml`, `.mxl`) that have a tab staff, and plain-text files.
+
 ## Tests
 
 ```bash

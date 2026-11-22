@@ -122,8 +122,10 @@ test('a slow first file does not overwrite a file picked after it', async ({ pag
   await input.setInputFiles({ name: 'song.mxl', mimeType: 'application/vnd.recordare.musicxml', buffer: tinyMxl() });
   const box = page.getByTestId('import-text');
   await expect(box).toHaveValue(/Capo: 3/);
+  const stale = page.waitForResponse(/\/assets\/pdf-[^/]*\.js$/);
   release();
-  await page.waitForTimeout(1500);
+  await stale;
+  await expect(page.getByText('Reading file…')).toHaveCount(0);
   await expect(box).toHaveValue(/Capo: 3/);
   await expect(page.getByText('Reading file…')).toHaveCount(0);
 });

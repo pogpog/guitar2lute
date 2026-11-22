@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  LUTE_PRESETS, GUITAR_PRESETS, findPreset, guitarTuningByName, inferGuitarTuning,
+  LUTE_PRESETS, GUITAR_PRESETS, findPreset, guitarTuningByName, inferGuitarTuning, guitarTuningFromCourses,
   addBassCourse, removeBassCourse, setCoursePitch, setFrettedCourses, setGuitarStringPitch, courseLabels,
 } from '../../src/core/tunings';
 
@@ -98,5 +98,12 @@ describe('courseLabels', () => {
     expect(courseLabels(findPreset('lute-10-g')!)[7].name).toBe('E♭2');
     expect(courseLabels(findPreset('guitar-half-down')!).map((c) => c.name)).toEqual(['E♭4', 'B♭3', 'G♭3', 'D♭3', 'A♭2', 'E♭2']);
     expect(courseLabels(findPreset('guitar-open-d')!)[2].name).toBe('F♯3');
+  });
+});
+
+describe('guitarTuningFromCourses', () => {
+  it('matches a preset or builds a custom tuning', () => {
+    expect(guitarTuningFromCourses([64, 59, 55, 50, 45, 38]).id).toBe('guitar-drop-d');
+    expect(guitarTuningFromCourses([64, 59, 55, 50, 45, 37]).id).toBe('guitar-custom');
   });
 });

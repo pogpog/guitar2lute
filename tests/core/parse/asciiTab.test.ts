@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { parseAsciiTab } from '../../../src/core/parse/asciiTab';
 import { importTabText } from '../../../src/core/parse/importText';
 import type { TabEvent } from '../../../src/core/model';
+import { stepsFromColumns } from '../../../src/audio/pluck';
 import * as F from './fixtures';
 
 const cols = (events: TabEvent[]) => events.flatMap((e) => (e.kind === 'col' ? [e.col.notes] : []));
@@ -128,8 +129,34 @@ describe('parseAsciiTab positions', () => {
     const block = ['|0---|--3-|', '|----|----|', '|----|----|', '|----|----|', '|----|----|', '|----|----|'];
     const r = parseAsciiTab([...block, '', ...block].join('\n'));
     const bars = r.events.filter((e) => e.kind === 'bar');
-    expect(bars.map((e) => (e.kind === 'bar' ? e.x : null))).toEqual([5, 10, 20, 25]);
+    expect(bars.map((e) => (e.kind === 'bar' ? e.x : null))).toEqual([5, 10, 15, 20]);
     const breaks = r.events.filter((e) => e.kind === 'break');
-    expect(breaks.map((e) => (e.kind === 'break' ? e.next : null))).toEqual([15, 30]);
+    expect(breaks.map((e) => (e.kind === 'break' ? e.next : null))).toEqual([10, 21]);
+  });
+  it('blocks follow each other in time', () => {
+    const block = ['|0--0-|', '|-----|', '|-----|', '|-----|', '|-----|', '|-----|'];
+    const r = parseAsciiTab([...block, '', ...block].join('\n'));
+    const xs = r.events.flatMap((e) => (e.kind === 'col' ? [e.col.x] : []));
+    const steps = stepsFromColumns(xs.map((x, index) => ({ x, pitches: [], index })), 100);
+    expect(steps.map((s) => s.time)).toEqual([0, 0.3, 0.6, 0.9]);
+  });
+  it('blocks without bars at the join just follow on', () => {
+    const block = ['-0--0-', '------', '------', '------', '------', '------'];
+    const r = parseAsciiTab([...block, '', ...block].join('\n'));
+    const xs = r.events.flatMap((e) => (e.kind === 'col' ? [e.col.x] : []));
+    expect(xs[2]).toBe(7);
+  });
+  it('the shared bar counts once only when 4+ lines have it', () => {
+    const mk = (closing: number) => ['|0--0-|', '|-----|', '|-----|', '|-----|', '|-----|', '|-----|'].map((l, k) => (k < closing ? l : l.slice(0, -1) + '-'));
+    for (const [closing, origin] of [[3, 7], [4, 6]]) {
+      const r = parseAsciiTab([...mk(closing), '', ...mk(6)].join('\n'));
+      const xs = r.events.flatMap((e) => (e.kind === 'col' ? [e.col.x] : []));
+      expect(xs[2]).toBe(origin + 1);
+    }
+  });
+  it('lets a Tuning header with octaves win over string labels', () => {
+    const text = 'Tuning: E3 A3 D4 G4 B3 E4\n' +
+      ['e|--0--|', 'B|--1--|', 'G|--0--|', 'D|--2--|', 'A|--3--|', 'E|-----|'].join('\n');
+    expect(importTabText(text).tuning!.courses).toEqual([64, 59, 67, 62, 57, 52]);
   });
 });

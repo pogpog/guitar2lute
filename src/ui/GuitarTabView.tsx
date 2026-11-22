@@ -12,7 +12,7 @@ export function GuitarTabView({ events, tuning, playing = null }: GuitarTabViewP
   const systems = splitSystems(events);
   const origins = systemOrigins(events);
   if (!systems.length) {
-    return <p className="muted" data-testid="guitar-tab-empty">No tab yet. Use “Import tab…” to paste text or upload a PDF.</p>;
+    return <p className="muted" data-testid="guitar-tab-empty">No tab yet. Use “Import tab…” to paste text or open a file.</p>;
   }
   const labels = tuningLabels(tuning);
   let first = 0; // column index of each system's first column

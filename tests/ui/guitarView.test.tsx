@@ -19,7 +19,14 @@ describe('ImportDialog', () => {
     const out = html(<ImportDialog initialText={AM_ARPEGGIO} hasPins={false} onImport={noop} onClose={noop} />);
     expect(out).toContain('5 columns found');
     expect(out).toContain('tuning Standard (E A D G B E)');
-    expect(out).toContain('data-testid="pdf-input"');
+  });
+  it('opens any file without an accept filter', () => {
+    const out = html(<ImportDialog initialText="" hasPins={false} onImport={noop} onClose={noop} />);
+    expect(out).toContain('data-testid="import-file"');
+    expect(out).not.toContain('accept=');
+    expect(out).toContain('wrap="off"');
+    expect(out).toContain('Open file…');
+    expect(out).toContain('Paste plain-text tab, or open a file: a PDF of plain-text tab, a MusicXML file with a tab staff (.musicxml, .mxl), or a text file.');
   });
 });
 

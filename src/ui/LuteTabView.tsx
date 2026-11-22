@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { LuteResult, Notation, Tuning } from '../core/model';
-import { layoutLuteTab, LAYOUT } from '../core/luteTabLayout';
+import { layoutLuteTab, LAYOUT, LUTE_VIEW_WIDTH } from '../core/luteTabLayout';
 
 export interface LuteTabViewProps {
   result: LuteResult;
@@ -11,7 +11,7 @@ export interface LuteTabViewProps {
   width?: number;
 }
 
-export function LuteTabView({ result, tuning, notation, playing, onCycle, width = 900 }: LuteTabViewProps) {
+export function LuteTabView({ result, tuning, notation, playing, onCycle, width = LUTE_VIEW_WIDTH }: LuteTabViewProps) {
   const layout = useMemo(() => layoutLuteTab(result.tab, tuning, notation, width), [result.tab, tuning, notation, width]);
   if (!layout.systems.length) {
     return <p className="muted" data-testid="lute-tab-empty">No tab yet. Import guitar tab in the Guitar view.</p>;

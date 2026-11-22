@@ -62,7 +62,7 @@ describe('openImportFile', () => {
   });
 
   it('refuses other XML and unknown binary', async () => {
-    expect(await openImportFile(enc('<html></html>'), deps())).toEqual({ ok: false, message: NOT_A_FILE });
+    expect(await openImportFile(enc('<!DOCTYPE html><html></html>'), deps())).toEqual({ ok: false, message: NOT_A_FILE });
     expect(await openImportFile(new Uint8Array([0, 1, 2, 3]), deps())).toEqual({ ok: false, message: NOT_A_FILE });
   });
 

@@ -131,6 +131,15 @@ function pickDetails(all: Element[], staff: number): Element | null {
   return all.find((d) => hasNumber(d) && staffOf(d) === staff) ?? all.find((d) => !hasNumber(d)) ?? null;
 }
 
+/** The staff's first `<staff-details>`: chosen within the first `<attributes>` that has one for it. */
+function firstDetails(part: Element, staff: number): Element | null {
+  for (const attrs of Array.from(part.getElementsByTagName('attributes'))) {
+    const details = pickDetails(childElements(attrs, 'staff-details'), staff);
+    if (details) return details;
+  }
+  return null;
+}
+
 /** First TAB-clef staff with 6 strings (spec §5.5 "Which staff"); the first clef and staff-details of each staff count. */
 function findTabStaff(root: Element, notices: Notices): TabStaff {
   const names = partNames(root);
@@ -140,11 +149,10 @@ function findTabStaff(root: Element, notices: Notices): TabStaff {
     const stavesEl = part.getElementsByTagName('staves')[0];
     const staves = stavesEl ? Math.max(1, Math.round(Number(stavesEl.textContent)) || 1) : 1;
     const clefs = Array.from(part.getElementsByTagName('clef'));
-    const allDetails = Array.from(part.getElementsByTagName('staff-details'));
     for (let staff = 1; staff <= staves; staff++) {
       const clef = clefs.find((c) => staffOf(c) === staff);
       if (!clef || childText(clef, 'sign') !== 'TAB') continue;
-      const details = pickDetails(allDetails, staff);
+      const details = firstDetails(part, staff);
       const tunings = details ? childElements(details, 'staff-tuning').length : 0;
       const lines = details ? numberText(details, 'staff-lines') : null;
       const strings = tunings || (lines ?? 5);

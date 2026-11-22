@@ -111,6 +111,24 @@ describe('which staff', () => {
     expect(placed(s)).toEqual([[0, 5, 0]]);
   });
 
+  it('keeps the first bar\'s unnumbered staff-details when a later bar adds numbered capo-only details', () => {
+    const tunings = ['D2', 'A2', 'D3', 'G3', 'B3', 'E4']
+      .map((p, i) => `<staff-tuning line="${i + 1}"><tuning-step>${p[0]}</tuning-step><tuning-octave>${p[1]}</tuning-octave></staff-tuning>`)
+      .join('');
+    const attrs =
+      '<attributes><divisions>1</divisions><staves>2</staves>' +
+      '<clef number="1"><sign>G</sign><line>2</line></clef>' +
+      '<clef number="2"><sign>TAB</sign><line>5</line></clef>' +
+      `<staff-details><staff-lines>6</staff-lines>${tunings}</staff-details></attributes>`;
+    const later = '<attributes><staff-details number="2"><capo>2</capo></staff-details></attributes>';
+    const s = tab([
+      attrs + n({ pitch: 'C4', d: 4, staff: 1 }) + backup(4) + n({ s: 6, f: 0, d: 4, staff: 2 }),
+      later + n({ pitch: 'C4', d: 4, staff: 1 }) + backup(4) + n({ s: 6, f: 0, d: 4, staff: 2 }),
+    ]);
+    expect(s.tuning).toEqual([64, 59, 55, 50, 45, 38]);
+    expect(s.notices).toEqual(["The tab's tuning or capo changes in bar 2; the first one was used."]);
+  });
+
   it('skips a 4-string tab staff before a 6-string one', () => {
     const s = read(
       score([

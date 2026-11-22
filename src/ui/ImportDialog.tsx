@@ -19,11 +19,15 @@ export function ImportDialog({ initialText, hasPins, onImport, onClose }: Import
   const [notices, setNotices] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  // Each pick gets a number; a read that finishes after a newer pick is dropped.
+  const latestPick = useRef(0);
   const preview = useMemo(() => importTabText(text), [text]);
   const cols = preview.events.filter((e) => e.kind === 'col').length;
 
   const onFile = async (file: File) => {
+    const pick = ++latestPick.current;
     if (file.size > MAX_FILE_BYTES) {
+      setBusy(false);
       setMessage(TOO_BIG);
       setNotices([]);
       return;
@@ -37,6 +41,7 @@ export function ImportDialog({ initialText, hasPins, onImport, onClose }: Import
         parser: new DOMParser(),
         extractPdfText: async (d) => (await import('../import/pdf')).extractPdfText(d),
       });
+      if (pick !== latestPick.current) return;
       if (!opened.ok) {
         setMessage(opened.message);
         return;
@@ -45,9 +50,9 @@ export function ImportDialog({ initialText, hasPins, onImport, onClose }: Import
       setNotices(opened.notices);
       setMessage(opened.message || null);
     } catch (e) {
-      setMessage(`Could not read this file: ${(e as Error).message}`);
+      if (pick === latestPick.current) setMessage(`Could not read this file: ${(e as Error).message}`);
     } finally {
-      setBusy(false);
+      if (pick === latestPick.current) setBusy(false);
     }
   };
 

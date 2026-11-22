@@ -107,7 +107,10 @@ export function sniff(bytes: Uint8Array): Sniffed {
   const start = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0;
   const body = bytes.subarray(start);
   const { root, head } = scanRoot(body, 'latin1');
-  if (root !== null) {
+  // Another root counts as XML only behind a prologue (`<?xml`, `<!DOCTYPE`, a comment):
+  // a text tab may well start with a tag-like word such as `<Intro>`.
+  const isXml = root !== null && (root.startsWith('score-') || /^[\s\uFEFF]*<[?!]/.test(head));
+  if (isXml) {
     const declared = /^\s*<\?xml[^>]*?\bencoding\s*=\s*["']([^"']+)["']/.exec(head.slice(0, 512));
     return classifyRoot(root, () => decode(declared ? declared[1] : 'utf-8', body));
   }

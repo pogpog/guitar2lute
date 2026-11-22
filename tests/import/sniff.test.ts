@@ -58,8 +58,13 @@ describe('sniff', () => {
   it('reports score-timewise', () => {
     expect(sniff(bytes('<score-timewise/>'))).toEqual({ kind: 'timewise' });
   });
-  it('rejects other XML roots', () => {
-    expect(sniff(bytes('<html><body/></html>'))).toEqual({ kind: 'unknown' });
+  it('rejects other XML roots behind a declaration or DOCTYPE', () => {
+    expect(sniff(bytes('<?xml version="1.0"?><svg/>'))).toEqual({ kind: 'unknown' });
+    expect(sniff(bytes('<!DOCTYPE html><html><body/></html>'))).toEqual({ kind: 'unknown' });
+  });
+  it('passes text tab that starts with a tag-like word through as text', () => {
+    const tabText = '<Intro>\ne|--0--|\nB|--1--|\n';
+    expect(sniff(bytes(tabText))).toEqual({ kind: 'text', text: tabText });
   });
   it('passes plain UTF-8 text through', () => {
     expect(sniff(bytes('e|--0--|\nTitle: Café\n'))).toEqual({ kind: 'text', text: 'e|--0--|\nTitle: Café\n' });

@@ -93,12 +93,39 @@ test('refuses a file over 100 MB and keeps the paste box', async ({ page }) => {
   await page.getByTestId('open-import').click();
   await page.getByTestId('import-text').fill('keep me');
   // A sparse file: Playwright rejects in-memory buffers over 50 MB.
-  const big = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'g2l-')), 'big.mp4');
-  fs.writeFileSync(big, '');
-  fs.truncateSync(big, 100 * 1024 * 1024 + 1);
-  await page.getByTestId('import-file').setInputFiles(big);
-  await expect(page.getByRole('alert')).toHaveText('This file is too large to open (over 100 MB).');
-  await expect(page.getByTestId('import-text')).toHaveValue('keep me');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g2l-'));
+  try {
+    const big = path.join(dir, 'big.mp4');
+    fs.writeFileSync(big, '');
+    fs.truncateSync(big, 100 * 1024 * 1024 + 1);
+    await page.getByTestId('import-file').setInputFiles(big);
+    await expect(page.getByRole('alert')).toHaveText('This file is too large to open (over 100 MB).');
+    await expect(page.getByTestId('import-text')).toHaveValue('keep me');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a slow first file does not overwrite a file picked after it', async ({ page }) => {
+  let release!: () => void;
+  const released = new Promise<void>((r) => (release = r));
+  // Hold back the PDF reader's code so the first pick stays in flight.
+  await page.route(/\/assets\/pdf-[^/]*\.js$/, async (route) => {
+    await released;
+    await route.continue();
+  });
+  await page.goto('/');
+  await page.getByTestId('open-import').click();
+  const input = page.getByTestId('import-file');
+  await input.setInputFiles({ name: 'slow.pdf', mimeType: 'application/pdf', buffer: makeTextPdf(TAB) });
+  await expect(page.getByText('Reading file…')).toBeVisible();
+  await input.setInputFiles({ name: 'song.mxl', mimeType: 'application/vnd.recordare.musicxml', buffer: tinyMxl() });
+  const box = page.getByTestId('import-text');
+  await expect(box).toHaveValue(/Capo: 3/);
+  release();
+  await page.waitForTimeout(1500);
+  await expect(box).toHaveValue(/Capo: 3/);
+  await expect(page.getByText('Reading file…')).toHaveCount(0);
 });
 
 test('a damaged .musicxml shows the damaged-file message', async ({ page }) => {

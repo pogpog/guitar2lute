@@ -347,3 +347,18 @@ test('shows imported tab with the spacing it was written with', async ({ page })
   const labels = ['e', 'B', 'G', 'D', 'A', 'E'];
   await expect(page.getByTestId('guitar-tab').locator('pre')).toHaveText(tab.map((l, s) => labels[s] + l).join('\n'));
 });
+
+test('changing the speed during playback slows the notes still to come', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('open-import').click();
+  const lines = ['e|0-1-2-3-4-5-6-7-|', ...['B', 'G', 'D', 'A', 'E'].map((s) => `${s}|----------------|`)];
+  await page.getByTestId('import-text').fill(lines.join('\n'));
+  await page.getByTestId('do-import').click();
+  // default 120 ms a character: 8 notes 2 characters apart end after about 0.1 + 1.68 + 1.5 s
+  await page.getByTestId('play').click();
+  await page.getByLabel('Speed').fill('40'); // slowest: 300 ms a character
+  await page.waitForTimeout(4200);
+  await expect(page.getByTestId('stop')).toBeVisible();
+  // slowed: 0.1 + 7 × 0.6 + 1.5 = 5.8 s
+  await expect(page.getByTestId('play')).toBeVisible({ timeout: 3000 });
+});

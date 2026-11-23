@@ -107,7 +107,10 @@ export function App({ storage }: { storage?: StorageLike }) {
         onPlay={playTab}
         onStop={stop}
         msPerUnit={msPerUnit}
-        onTempo={setMsPerUnit}
+        onTempo={(next) => {
+          player.setSpeed(next / msPerUnit);
+          setMsPerUnit(next);
+        }}
         onExport={onExport}
         onImportJson={(f) => void onImportJson(f)}
         onToggleSidebar={() => setSidebarOpen((o) => !o)}

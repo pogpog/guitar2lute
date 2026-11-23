@@ -114,7 +114,7 @@ export function convertPiece(piece: Piece, transpose: number = piece.lute.transp
     const where = `Tab column ${ci + 1}${line ? ` (line ${line})` : ''}`;
     reportPins(solutions[ci].badPins, where, { tabColumn: ci, line });
     report(c, colInputs[ci], where, { tabColumn: ci, line });
-    tab.push({ kind: 'col', index: ci, x: ev.col.x, notes: toLuteNotes(c), dropped: c.dropped.map((d) => d.pitch) });
+    tab.push({ kind: 'col', index: ci, x: ev.col.x, t: ev.col.t, notes: toLuteNotes(c), dropped: c.dropped.map((d) => d.pitch) });
     ci++;
   }
   return { chords, tab, warnings, totalCost, stats, flats };

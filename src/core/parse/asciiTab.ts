@@ -97,7 +97,16 @@ function blocksFromRun(run: LineInfo[]): { blocks: LineInfo[][]; skipped: LineIn
   return { blocks, skipped };
 }
 
-function parseBlock(lines: LineInfo[], xOffset: number): { events: TabEvent[]; width: number; warnings: Warning[]; endsWithBar: boolean } {
+/**
+ * `barsBefore`: barline characters before this block, which take no time; `sharedOpening`: the
+ * block's opening `|` is the previous block's closing one, already counted.
+ */
+function parseBlock(
+  lines: LineInfo[],
+  xOffset: number,
+  barsBefore: number,
+  sharedOpening: boolean,
+): { events: TabEvent[]; width: number; warnings: Warning[]; endsWithBar: boolean; barChars: number } {
   const block = alignLeadingBars(lines);
   const warnings: Warning[] = [];
   const tokens: Token[] = [];
@@ -164,6 +173,8 @@ function parseBlock(lines: LineInfo[], xOffset: number): { events: TabEvent[]; w
   }
 
   const bars = [...barCounts.entries()].filter(([col, n]) => col > 0 && n >= 4).map(([col]) => col).sort((a, b) => a - b);
+  const timeless = (barCounts.get(0) ?? 0) >= 4 && !sharedOpening ? [0, ...bars] : bars;
+  const timeOf = (col: number) => xOffset + col - barsBefore - timeless.filter((b) => b < col).length;
   const events: TabEvent[] = [];
   const pushBar = (col: number) => {
     if (events.length && events[events.length - 1].kind !== 'bar') events.push({ kind: 'bar', x: xOffset + col });
@@ -177,13 +188,14 @@ function parseBlock(lines: LineInfo[], xOffset: number): { events: TabEvent[]; w
       col: {
         notes: g.notes.sort((a, b) => a.string - b.string),
         x: xOffset + g.start,
+        t: timeOf(g.start),
         src: { line: srcLine.index + 1, col: srcLine.origin + g.start + 1 },
       },
     });
   }
   while (bi < bars.length) { pushBar(bars[bi]); bi++; }
   const endsWithBar = block.filter((l) => l.body.endsWith('|')).length >= 4;
-  return { events, width, warnings, endsWithBar };
+  return { events, width, warnings, endsWithBar, barChars: timeless.length };
 }
 
 export function parseAsciiTab(raw: string): AsciiParseResult {
@@ -194,6 +206,7 @@ export function parseAsciiTab(raw: string): AsciiParseResult {
   let xOffset = 0;
   let prevEnd: { width: number; endsWithBar: boolean } | null = null;
   let lastBreak: Extract<TabEvent, { kind: 'break' }> | null = null;
+  let barsBefore = 0;
   let i = 0;
   while (i < infos.length) {
     if (!infos[i].isTab) { i++; continue; }
@@ -216,12 +229,14 @@ export function parseAsciiTab(raw: string): AsciiParseResult {
       }
       for (const block of blocks) {
         // Blocks follow each other in time; a barline closing one block and opening the next counts once.
+        let shared = false;
         if (prevEnd) {
-          const shared = prevEnd.endsWithBar && block.filter((l) => l.body.startsWith('|')).length >= 4;
+          shared = prevEnd.endsWithBar && block.filter((l) => l.body.startsWith('|')).length >= 4;
           xOffset += prevEnd.width - (shared ? 1 : 0);
           lastBreak!.next = xOffset;
         }
-        const parsed = parseBlock(block, xOffset);
+        const parsed = parseBlock(block, xOffset, barsBefore, shared);
+        barsBefore += parsed.barChars;
         lastBreak = { kind: 'break', next: xOffset + parsed.width };
         events.push(...parsed.events, lastBreak);
         warnings.push(...parsed.warnings);

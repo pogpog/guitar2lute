@@ -132,7 +132,7 @@ describe('MusicXML → tab text → tab', () => {
     const text = writeTabText(s);
     const { events } = importTabText(text);
     expect(events.filter((e) => e.kind === 'break')).toHaveLength(2);
-    const cols = columns(events).map((c, index) => ({ x: c.x, pitches: [], index }));
+    const cols = columns(events).map((c, index) => ({ x: c.t!, pitches: [], index }));
     const steps = stepsFromColumns(cols, 120);
     const onsets = [...new Set(s.notes.filter((x) => x.slot === 0).map((x) => x.time))];
     expect(steps).toHaveLength(onsets.length);
@@ -171,10 +171,10 @@ describe('MusicXML → tab text → tab', () => {
     const back = importTabText(text);
     expect(back.capo).toBe(3);
     expect(s.measures[0].length).toBe(s.unit);
-    // 8ths at 3 characters: the one-beat pickup's bar sits at 6, bar 1 starts at 7
+    // 8ths at 3 characters: the one-beat pickup fills characters 1–6, its bar sits at 7, bar 1 starts at 8
     const bars = back.events.flatMap((e) => (e.kind === 'bar' ? [e.x] : []));
-    expect(bars[0]).toBe(6);
-    expect(columns(back.events)[2].x).toBe(7);
+    expect(bars[0]).toBe(7);
+    expect(columns(back.events)[2].x).toBe(8);
     // blocks: bars 0–3, then the page mark at bar 4; without the mark it all fits one line
     const barsPerBlock = (t: string) => t.trimEnd().split('\n\n').slice(1).map((b) => b.split('\n')[0].split('|').length - 2);
     expect(barsPerBlock(text)).toEqual([4, 2]);

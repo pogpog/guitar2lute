@@ -33,6 +33,15 @@ describe('piece helpers', () => {
     ];
     expect(guitarColumns(p)).toEqual([{ x: 2, pitches: [64], index: 0 }, { x: 5, pitches: [60], index: 1 }]);
   });
+  it('plays guitar columns at their time, not their column, when they have one', () => {
+    const p = newPiece();
+    p.guitar.tab = [
+      { kind: 'col', col: { notes: [{ string: 0, fret: 0 }], x: 1, t: 0 } },
+      { kind: 'bar', x: 5 },
+      { kind: 'col', col: { notes: [{ string: 0, fret: 0 }], x: 6, t: 4 } },
+    ];
+    expect(guitarColumns(p).map((c) => c.x)).toEqual([0, 4]);
+  });
 });
 
 describe('isBlankPiece', () => {

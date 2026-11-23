@@ -43,7 +43,7 @@ export function App({ storage }: { storage?: StorageLike }) {
     const cols =
       view === 'guitar'
         ? guitarColumns(piece)
-        : result.tab.flatMap((e) => (e.kind === 'col' ? [{ x: e.x, pitches: e.notes.map((n) => n.pitch), index: e.index }] : []));
+        : result.tab.flatMap((e) => (e.kind === 'col' ? [{ x: e.t ?? e.x, pitches: e.notes.map((n) => n.pitch), index: e.index }] : []));
     player.playSteps(stepsFromColumns(cols, msPerUnit), setPlaying);
     setPlaying(cols.length ? cols[0].index : null);
   };

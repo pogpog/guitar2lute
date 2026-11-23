@@ -70,6 +70,7 @@ function scaleOf(score: TabScore, columns: Column[][]): { chars: number; units: 
  * A grace column aims 3 characters per slot before its note (after it, for an after-grace); a
  * measure's `|` aims one character before the next measure's first item, graces included, so a
  * grace on a downbeat takes its room from the gap before, yet stays after the `|`, in its own bar.
+ * A `|` takes no time (the reader skips it), so measure i sits i characters further right.
  */
 function place(score: TabScore, columns: Column[][]): number[] {
   const { chars, units } = scaleOf(score, columns);
@@ -85,12 +86,12 @@ function place(score: TabScore, columns: Column[][]): number[] {
   let afterCol = false;
   score.measures.forEach((m, i) => {
     for (const col of columns[i]) {
-      col.x = Math.max(base + target(col), end + (afterCol ? 2 : 1));
+      col.x = Math.max(base + i + target(col), end + (afterCol ? 2 : 1));
       end = col.x + col.width - 1;
       afterCol = true;
     }
     const next = i + 1 < score.measures.length ? startOf(i + 1) : at(m.start + m.length);
-    const bar = Math.max(base + next - 1, end + 1);
+    const bar = Math.max(base + i + next, end + 1);
     bars.push(bar);
     end = bar;
     afterCol = false;

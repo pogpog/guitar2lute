@@ -133,12 +133,24 @@ describe('parseAsciiTab positions', () => {
     const breaks = r.events.filter((e) => e.kind === 'break');
     expect(breaks.map((e) => (e.kind === 'break' ? e.next : null))).toEqual([10, 21]);
   });
-  it('blocks follow each other in time', () => {
+  it('blocks follow each other in time, and a barline takes no time', () => {
     const block = ['|0--0-|', '|-----|', '|-----|', '|-----|', '|-----|', '|-----|'];
     const r = parseAsciiTab([...block, '', ...block].join('\n'));
-    const xs = r.events.flatMap((e) => (e.kind === 'col' ? [e.col.x] : []));
-    const steps = stepsFromColumns(xs.map((x, index) => ({ x, pitches: [], index })), 100);
-    expect(steps.map((s) => s.time)).toEqual([0, 0.3, 0.6, 0.9]);
+    const ts = r.events.flatMap((e) => (e.kind === 'col' ? [e.col.t!] : []));
+    const steps = stepsFromColumns(ts.map((x, index) => ({ x, pitches: [], index })), 100);
+    // each bar holds 5 characters of time: 0 at 0 and 3, then the next bar from 5
+    expect(steps.map((s) => s.time)).toEqual([0, 0.3, 0.5, 0.8]);
+  });
+  it('times a column without counting the barlines before it', () => {
+    const line = (s: string) => [s, ...Array(5).fill(s.replace(/\d/g, '-'))];
+    const r = parseAsciiTab(line('|0---|0---|0---|').join('\n'));
+    expect(r.events.flatMap((e) => (e.kind === 'col' ? [[e.col.x, e.col.t]] : []))).toEqual([[1, 0], [6, 4], [11, 8]]);
+  });
+  it('does not time the opening barline of a block that follows one without a closing bar', () => {
+    const first = ['-0--', '----', '----', '----', '----', '----'];
+    const second = ['|0---', '|----', '|----', '|----', '|----', '|----'];
+    const r = parseAsciiTab([...first, '', ...second].join('\n'));
+    expect(r.events.flatMap((e) => (e.kind === 'col' ? [[e.col.x, e.col.t]] : []))).toEqual([[1, 1], [5, 4]]);
   });
   it('blocks without bars at the join just follow on', () => {
     const block = ['-0--0-', '------', '------', '------', '------', '------'];

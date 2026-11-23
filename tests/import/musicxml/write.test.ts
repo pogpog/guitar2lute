@@ -115,13 +115,14 @@ describe('headers and labels', () => {
 });
 
 describe('scale', () => {
-  it('gives a 16th 3 characters and the barline the last slot before the next measure', () => {
+  it('gives a 16th 3 characters and the barline a character of its own, outside the time', () => {
     const measures = measuresOf([4, 4]);
     const text = writeTabText(tabScore({ unit: 4, measures, notes: notesAt(measures, every(0, 8, 1)) }));
-    expect(blocksOf(text)[0][0]).toBe('e|0--0--0--0-|0--0--0--0-|');
-    const { xs, bars } = parsed(text);
-    expect(xs).toEqual([1, 4, 7, 10, 13, 16, 19, 22]);
-    expect(bars).toEqual([12, 24]);
+    expect(blocksOf(text)[0][0]).toBe('e|0--0--0--0--|0--0--0--0--|');
+    const { xs, bars, events } = parsed(text);
+    expect(xs).toEqual([1, 4, 7, 10, 14, 17, 20, 23]);
+    expect(bars).toEqual([13, 26]);
+    expect(events.flatMap((e) => (e.kind === 'col' ? [e.col.t] : []))).toEqual(every(0, 24, 3));
   });
 
   it('squeezes a single 32nd instead of scaling the piece by it', () => {
@@ -130,8 +131,8 @@ describe('scale', () => {
     const notes = notesAt(measures, [0, 3, ...every(4, 64, 2)]);
     const { xs, bars } = parsed(writeTabText(tabScore({ unit: 8, measures, notes })));
     expect(xs.slice(0, 5)).toEqual([1, 6, 8, 10, 13]);
-    expect(bars).toEqual([48, 96]);
-    expect(xs.slice(16)).toEqual(every(49, 96, 3));
+    expect(bars).toEqual([49, 98]);
+    expect(xs.slice(16)).toEqual(every(50, 97, 3));
   });
 
   it('keeps the musical 16th when snapped clusters leave a few uneven gaps', () => {
@@ -147,8 +148,8 @@ describe('scale', () => {
     const s = readMusicXml(parseXml(xml, parser));
     expect(s.notes.some((x) => x.time === 24)).toBe(true);
     const { xs, bars } = parsed(writeTabText(s));
-    expect(bars).toEqual([48, 96, 144, 192]);
-    expect(xs.slice(-16)).toEqual(every(145, 192, 3));
+    expect(bars).toEqual([49, 98, 147, 196]);
+    expect(xs.slice(-16)).toEqual(every(148, 195, 3));
   });
 
   it('falls back to the most common gap when none makes up 5%', () => {
@@ -156,23 +157,23 @@ describe('scale', () => {
     const times = every(0, 26, 1).map((k) => (k * (k + 1)) / 2);
     const measures = measuresOf([times[times.length - 1] + 2]);
     const { bars } = parsed(writeTabText(tabScore({ unit: 4, measures, notes: notesAt(measures, times) })));
-    expect(bars).toEqual([Math.round((327 * 3) / 2)]);
+    expect(bars).toEqual([Math.round((327 * 3) / 2) + 1]);
   });
 
   it('gives a quarter 12 characters in a single-column piece', () => {
     const measures = measuresOf([4]);
     const text = writeTabText(tabScore({ unit: 4, measures, notes: notesAt(measures, [0], { frets: [3] }) }));
-    expect(blocksOf(text)[0][0]).toBe('e|3' + '-'.repeat(10) + '|');
-    expect(parsed(text).bars).toEqual([12]);
+    expect(blocksOf(text)[0][0]).toBe('e|3' + '-'.repeat(11) + '|');
+    expect(parsed(text).bars).toEqual([13]);
   });
 });
 
 describe('placement', () => {
-  it('keeps at least one dash after a two-digit fret and lets a bar touch digits', () => {
+  it('keeps at least one dash after a two-digit fret', () => {
     const measures = measuresOf([4, 4]);
     const notes = notesAt(measures, every(0, 8, 1), { frets: [12] });
     const text = writeTabText(tabScore({ unit: 4, measures, notes }));
-    expect(blocksOf(text)[0][0]).toBe('e|12-12-12-12|12-12-12-12|');
+    expect(blocksOf(text)[0][0]).toBe('e|12-12-12-12-|12-12-12-12-|');
     expect(parsed(text).cols.map((c) => c.notes[0].fret)).toEqual(Array(8).fill(12));
   });
 
@@ -183,7 +184,7 @@ describe('placement', () => {
     const graces = notesAt(measures, [2, 12], { slot: -1, string: 1, frets: [2] });
     const { xs, bars } = parsed(writeTabText(tabScore({ unit: 4, measures, notes: [...main, ...graces] })));
     expect(xs).toEqual([1, 4, 6, 8, 10, 13, 34, 37]);
-    expect(bars).toEqual([48]);
+    expect(bars).toEqual([49]);
   });
 
   it('keeps a grace before a downbeat in its own bar, moving the barline instead of the downbeat', () => {
@@ -191,10 +192,12 @@ describe('placement', () => {
     const main = notesAt(measures, [0, 8, ...every(16, 32, 1)]);
     const grace = notesAt(measures, [16], { slot: -1, string: 1, frets: [2] });
     const { xs, bars, events } = parsed(writeTabText(tabScore({ unit: 4, measures, notes: [...main, ...grace] })));
-    expect(xs.slice(0, 5)).toEqual([1, 25, 46, 49, 52]);
-    expect(bars).toEqual([45, 96]);
+    expect(xs.slice(0, 5)).toEqual([1, 25, 47, 50, 53]);
+    expect(bars).toEqual([46, 98]);
     const firstBar = events.findIndex((e) => e.kind === 'bar');
-    expect(events[firstBar + 1]).toMatchObject({ kind: 'col', col: { x: 46 } });
+    expect(events[firstBar + 1]).toMatchObject({ kind: 'col', col: { x: 47 } });
+    // the downbeat keeps its time: 16 sixteenths of 3 characters
+    expect(events[firstBar + 2]).toMatchObject({ kind: 'col', col: { t: 48 } });
   });
 
   it('shifts a downbeat when the gap before has no room for its grace', () => {
@@ -203,8 +206,8 @@ describe('placement', () => {
     const grace = notesAt(measures, [16], { slot: -1, string: 1, frets: [2] });
     const { xs, bars } = parsed(writeTabText(tabScore({ unit: 4, measures, notes: [...main, ...grace] })));
     // the last 16th of bar 1 sits at 46: the barline goes straight after it, then grace, downbeat
-    expect(xs.slice(15, 20)).toEqual([46, 48, 50, 52, 55]);
-    expect(bars).toEqual([47, 96]);
+    expect(xs.slice(15, 20)).toEqual([46, 48, 50, 53, 56]);
+    expect(bars).toEqual([47, 98]);
   });
 
   it('starts the piece with a grace on the first note straight after the opening barline', () => {
@@ -213,7 +216,7 @@ describe('placement', () => {
     const grace = notesAt(measures, [0], { slot: -1, string: 1, frets: [2] });
     const { xs, bars } = parsed(writeTabText(tabScore({ unit: 4, measures, notes: [...main, ...grace] })));
     expect(xs.slice(0, 3)).toEqual([1, 4, 7]);
-    expect(bars).toEqual([51]);
+    expect(bars).toEqual([52]);
   });
 });
 
@@ -251,8 +254,8 @@ describe('blocks', () => {
       expect(lines).toHaveLength(6);
       for (const l of lines) expect(l).toMatch(/^[A-Ga-g]#? ?\|.*\|$/);
     }
-    const { xs } = parsed(text);
-    expect(xs).toEqual(xs.map((_, i) => 1 + 3 * i));
+    const ts = parsed(text).events.flatMap((e) => (e.kind === 'col' ? [e.col.t] : []));
+    expect(ts).toEqual(ts.map((_, i) => 3 * i));
   });
 
   it('starts a block at newBlock, never an empty one before the first measure', () => {
@@ -267,14 +270,14 @@ describe('blocks', () => {
     const measures = measuresOf([16, 1], [1]);
     const text = writeTabText(tabScore({ unit: 4, measures, notes: notesAt(measures, every(0, 17, 1)) }));
     expect(barsPerBlock(text)).toEqual([2]);
-    expect(parsed(text).bars).toEqual([48, 51]);
+    expect(parsed(text).bars).toEqual([49, 53]);
   });
 
   it('pads the end of a single block too short to read as tab', () => {
     const measures = measuresOf([4, 4]);
-    const text = writeTabText(tabScore({ unit: 1, measures, notes: notesAt(measures, [0, 4], { frets: [0, 1] }) }));
-    expect(blocksOf(text)[0][0]).toBe('e|0-|1--|');
-    expect(parsed(text).xs).toEqual([1, 4]);
+    const text = writeTabText(tabScore({ unit: 1, measures, notes: notesAt(measures, [0, 4], { frets: [12, 13] }) }));
+    expect(blocksOf(text)[0][0]).toBe('e|12-|13--|');
+    expect(parsed(text).xs).toEqual([1, 5]);
   });
 
   it('keeps a lone measure wider than a lute line whole', () => {

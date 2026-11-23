@@ -42,7 +42,7 @@ export function guitarColumns(piece: Piece): { x: number; pitches: Midi[]; index
   const out: { x: number; pitches: Midi[]; index: number }[] = [];
   for (const ev of piece.guitar.tab) {
     if (ev.kind === 'col') {
-      out.push({ x: ev.col.x, pitches: columnPitches(ev.col, piece.guitar.tuning, piece.guitar.capo), index: out.length });
+      out.push({ x: ev.col.t ?? ev.col.x, pitches: columnPitches(ev.col, piece.guitar.tuning, piece.guitar.capo), index: out.length });
     }
   }
   return out;

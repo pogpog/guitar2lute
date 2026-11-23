@@ -21,7 +21,11 @@ export interface ChordShape {
 }
 
 export interface TabNote { string: number; fret: number; }
-export interface TabColumn { notes: TabNote[]; x: number; src?: { line: number; col: number }; }
+/**
+ * x: the column's position in the source text (drawing). t: its time on the same scale, with
+ * barline characters left out, since a `|` takes no time (absent in pieces saved before it was recorded).
+ */
+export interface TabColumn { notes: TabNote[]; x: number; t?: number; src?: { line: number; col: number }; }
 export type TabEvent =
   | { kind: 'col'; col: TabColumn }
   /** x: where the barline was in the source, on the same scale as TabColumn.x (absent in pieces imported before it was recorded) */
@@ -93,7 +97,7 @@ export interface LuteNote {
 
 export interface LuteVoicing { notes: LuteNote[]; dropped: Midi[]; cost: number; }
 export interface LuteChord { name: string; voicings: LuteVoicing[]; chosen: number; }
-export interface LuteColumn { kind: 'col'; index: number; x: number; notes: LuteNote[]; dropped: Midi[]; }
+export interface LuteColumn { kind: 'col'; index: number; x: number; t?: number; notes: LuteNote[]; dropped: Midi[]; }
 export type LuteTabEvent = LuteColumn | { kind: 'bar' } | { kind: 'break' };
 
 export interface LuteResult {

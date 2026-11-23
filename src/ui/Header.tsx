@@ -42,7 +42,7 @@ export function Header(props: HeaderProps) {
         {playing ? (
           <button type="button" data-testid="stop" onClick={onStop}>■ Stop</button>
         ) : (
-          <button type="button" data-testid="play" onClick={onPlay}>▶ Play tab</button>
+          <button type="button" data-testid="play" onClick={onPlay}>▶ Play</button>
         )}
         <label className="tempo">
           Speed

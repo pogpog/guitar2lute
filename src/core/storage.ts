@@ -1,6 +1,7 @@
-import type { Piece } from './model';
+import type { Piece, TabEvent } from './model';
 import { SCHEMA_VERSION } from './model';
 import { newId } from './piece';
+import { parseAsciiTab } from './parse/asciiTab';
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -105,7 +106,23 @@ export function migrate(raw: unknown): Piece {
   if (v !== SCHEMA_VERSION) throw new Error('Missing or unknown schemaVersion.');
   const bad = invalidField(raw);
   if (bad) throw new Error(`Invalid piece (${bad}).`);
-  return raw as unknown as Piece;
+  return retimeTab(raw as unknown as Piece);
+}
+
+const notesKey = (events: TabEvent[]): string =>
+  JSON.stringify(events.flatMap((e) => (e.kind === 'col' ? [e.col.notes.map((n) => [n.string, n.fret])] : [])));
+
+/**
+ * Re-read the tab from its source text, so pieces saved by an older parser get its current timing
+ * (e.g. no gap at line breaks). Only when the notes come out identical, so lute pins (keyed by
+ * column) stay on the same notes; otherwise the stored tab is kept.
+ */
+function retimeTab(p: Piece): Piece {
+  const text = p.guitar.sourceText;
+  if (!text) return p;
+  const events = parseAsciiTab(text).events;
+  if (notesKey(events) !== notesKey(p.guitar.tab)) return p;
+  return { ...p, guitar: { ...p.guitar, tab: events } };
 }
 
 export class PieceStore {

@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { MemoryStorage, PieceStore, migrate, exportPieces, importPieces } from '../../src/core/storage';
 import { newPiece } from '../../src/core/piece';
+import { applyImport, setTabPin } from '../../src/core/edit';
+import { importTabText } from '../../src/core/parse/importText';
+import type { Piece, TabEvent } from '../../src/core/model';
 
 describe('PieceStore', () => {
   it('saves, lists, loads and removes pieces', () => {
@@ -47,6 +50,52 @@ describe('PieceStore', () => {
     const s = new MemoryStorage();
     s.setItem('g2l:piece:x', 'garbage');
     expect(() => new PieceStore(s).load('x')).toThrow();
+  });
+});
+
+const TWO_LINES = [
+  'e|--0---|', 'B|------|', 'G|------|', 'D|------|', 'A|------|', 'E|------|',
+  '',
+  'e|---3--|', 'B|------|', 'G|------|', 'D|------|', 'A|------|', 'E|------|',
+].join('\n');
+
+/** The tab as the parser before 810f208 laid it out: a 4-column gap at each line break. */
+function oldTiming(events: TabEvent[]): TabEvent[] {
+  let shift = 0;
+  return events.map((e) => {
+    if (e.kind === 'break') {
+      const out = { ...e, next: (e.next ?? 0) + shift + 5 };
+      shift += 5;
+      return out;
+    }
+    if (e.kind === 'bar') return { ...e, x: (e.x ?? 0) + shift };
+    return { ...e, col: { ...e.col, x: e.col.x + shift } };
+  });
+}
+
+function savedWithOldTiming(text: string): Piece {
+  const p = applyImport(newPiece(), importTabText(text), text);
+  return JSON.parse(JSON.stringify({ ...p, guitar: { ...p.guitar, tab: oldTiming(p.guitar.tab) } }));
+}
+
+describe('re-reading saved tab text', () => {
+  it('re-times a saved tab from its source text and keeps lute pins', () => {
+    const fresh = importTabText(TWO_LINES).events;
+    const saved = setTabPin(savedWithOldTiming(TWO_LINES), 1, 0, { course: 1, fret: 5 });
+    expect(saved.guitar.tab).not.toEqual(fresh);
+    const p = migrate(saved);
+    expect(p.guitar.tab).toEqual(fresh);
+    expect(p.overrides.tabPins).toEqual({ 1: { 0: { course: 1, fret: 5 } } });
+  });
+  it('keeps the stored tab when the source text gives different notes', () => {
+    const saved = savedWithOldTiming(TWO_LINES);
+    saved.guitar.sourceText = TWO_LINES.replace('--0---', '--2---');
+    expect(migrate(saved).guitar.tab).toEqual(saved.guitar.tab);
+  });
+  it('keeps the stored tab when there is no source text', () => {
+    const saved = savedWithOldTiming(TWO_LINES);
+    delete saved.guitar.sourceText;
+    expect(migrate(saved).guitar.tab).toEqual(saved.guitar.tab);
   });
 });
 

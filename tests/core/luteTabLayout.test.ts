@@ -35,14 +35,38 @@ describe('layoutLuteTab', () => {
     const g = layoutLuteTab([col(4, 0, [note(0, 0, { shifted: 12, pinned: true, srcNoteIndex: 2 })])], six, 'french', 800).systems[0].glyphs[0];
     expect(g).toMatchObject({ shifted: true, pinned: true, colIndex: 4, noteIndex: 2 });
   });
-  it('places bars between columns and starts systems at breaks', () => {
+  it('places bars between columns and runs on across the guitar tab\'s line breaks', () => {
     const l = layoutLuteTab([col(0, 0, [note(0, 0)]), { kind: 'bar' }, col(1, 3, [note(0, 1)]), { kind: 'break' }, col(2, 10, [note(0, 2)])], six, 'french', 800);
-    expect(l.systems).toHaveLength(2);
-    const [a, b] = l.systems[0].columns.map((c) => c.x);
+    expect(l.systems).toHaveLength(1);
+    const [a, b, c] = l.systems[0].columns.map((col) => col.x);
     expect(l.systems[0].bars).toHaveLength(1);
     expect(l.systems[0].bars[0]).toBeGreaterThan(a);
     expect(l.systems[0].bars[0]).toBeLessThan(b);
-    expect(l.systems[1].y).toBeGreaterThan(l.systems[0].y);
+    expect(c).toBeGreaterThan(b);
+  });
+  it('fills each line with whole bars', () => {
+    // a bar is 4 columns 3 characters apart: 3 bars fit in 400 px (311 px), 4 don't (405 px)
+    const tab: LuteTabEvent[] = [];
+    for (let m = 0; m < 10; m++) {
+      for (let k = 0; k < 4; k++) tab.push(col(m * 4 + k, m * 13 + k * 3, [note(0, 0)]));
+      tab.push({ kind: 'bar' });
+      if (m % 2 === 1) tab.push({ kind: 'break' });
+    }
+    const l = layoutLuteTab(tab, six, 'french', 400);
+    expect(l.systems.map((s) => s.columns.length)).toEqual([12, 12, 12, 4]);
+    expect(l.systems.map((s) => s.bars.length)).toEqual([3, 3, 3, 1]);
+    for (const s of l.systems) expect(s.width).toBeLessThanOrEqual(400);
+  });
+  it('splits the next bar rather than leave a line less than two-thirds full', () => {
+    const tab: LuteTabEvent[] = [col(0, 0, [note(0, 0)]), { kind: 'bar' }];
+    for (let k = 0; k < 40; k++) tab.push(col(k + 1, 4 + k * 3, [note(0, 0)]));
+    tab.push({ kind: 'bar' }, col(41, 200, [note(0, 0)]));
+    const l = layoutLuteTab(tab, six, 'french', 400);
+    // the one-column bar would leave the line 40 px of 400 full: the long bar continues on it
+    expect(l.systems[0].bars).toHaveLength(1);
+    expect(l.systems[0].columns.length).toBeGreaterThan(10);
+    for (const s of l.systems) expect(s.width).toBeLessThanOrEqual(400);
+    expect(l.systems.flatMap((s) => s.columns)).toHaveLength(42);
   });
   it('wraps long systems to the width', () => {
     const tab = Array.from({ length: 100 }, (_, i) => col(i, i * 3, [note(0, 0)]));
@@ -57,7 +81,8 @@ describe('layoutLuteTab', () => {
     const thirteen = findPreset('lute-13-baroque-dm')!;
     const stack = [note(6, 0), note(7, 0), note(8, 0), note(9, 0), note(10, 0)];
     for (const notation of ['french', 'italian'] as const) {
-      const { systems } = layoutLuteTab([col(0, 0, stack), { kind: 'break' }, col(1, 0, stack)], thirteen, notation, 800);
+      // 60 px fits one column a line
+      const { systems } = layoutLuteTab([col(0, 0, stack), col(1, 0, stack)], thirteen, notation, 60);
       expect(systems).toHaveLength(2);
       for (const s of systems) {
         for (const g of s.glyphs) {

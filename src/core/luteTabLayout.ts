@@ -1,4 +1,4 @@
-import type { LuteTabEvent, Notation, Tuning } from './model';
+import type { LuteColumn, LuteTabEvent, Notation, Tuning } from './model';
 import { noteGlyph } from './notation';
 
 export const LAYOUT = { lineGap: 14, unit: 7, minGap: 20, margin: 20, systemGap: 28 };
@@ -61,6 +61,21 @@ export function rowFor(course: number, notation: Notation): number {
   return course < 6 ? 5 - course : course === 6 ? -1 : -2;
 }
 
+/** The tab as bars: each bar's columns and whether a barline closes it. Line breaks are dropped. */
+function barsOf(tab: LuteTabEvent[]): { cols: LuteColumn[]; closed: boolean }[] {
+  const bars: { cols: LuteColumn[]; closed: boolean }[] = [];
+  let cols: LuteColumn[] = [];
+  for (const ev of tab) {
+    if (ev.kind === 'col') cols.push(ev);
+    else if (ev.kind === 'bar') {
+      bars.push({ cols, closed: true });
+      cols = [];
+    }
+  }
+  if (cols.length) bars.push({ cols, closed: false });
+  return bars;
+}
+
 export function layoutLuteTab(tab: LuteTabEvent[], tuning: Tuning, notation: Notation, maxWidth: number): TabLayout {
   const { lineGap, minGap, margin, systemGap } = LAYOUT;
   const lines = staffLineCount(tuning, notation);
@@ -96,18 +111,7 @@ export function layoutLuteTab(tab: LuteTabEvent[], tuning: Tuning, notation: Not
     lastSrcX = null;
   };
 
-  for (const ev of tab) {
-    if (ev.kind === 'break') {
-      restart();
-      continue;
-    }
-    if (ev.kind === 'bar') {
-      if (cur.columns.length) {
-        cursor += minGap / 2;
-        cur.bars.push(cursor);
-      }
-      continue;
-    }
+  const place = (ev: LuteColumn) => {
     let advance = columnAdvance(ev.x, lastSrcX);
     if (cursor + advance > maxWidth - margin && cur.columns.length) {
       restart();
@@ -138,6 +142,25 @@ export function layoutLuteTab(tab: LuteTabEvent[], tuning: Tuning, notation: Not
         colIndex: ev.index,
         noteIndex: n.srcNoteIndex,
       });
+    }
+  };
+
+  // Lines fill the width with whole bars, ignoring the guitar tab's line breaks. A bar that
+  // doesn't fit starts a new line, unless the line is under two-thirds full: then the bar is
+  // split between columns to fill it (as is a bar wider than a line on its own).
+  for (const bar of barsOf(tab)) {
+    let end = cursor;
+    let last: number | null = lastSrcX;
+    for (const c of bar.cols) {
+      end += columnAdvance(c.x, last);
+      last = c.x;
+    }
+    if (bar.closed) end += minGap / 2;
+    if (end > maxWidth - margin && cur.columns.length && cursor + margin >= (2 / 3) * maxWidth) restart();
+    bar.cols.forEach(place);
+    if (bar.closed && cur.columns.length) {
+      cursor += minGap / 2;
+      cur.bars.push(cursor);
     }
   }
   restart();

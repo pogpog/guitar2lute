@@ -112,6 +112,15 @@ mark.playing { background: var(--playing); color: inherit; border-radius: 2px; }
 .tuning-editor h3 { margin: 0 0 6px; }
 .tuning-editor table { border-collapse: collapse; }
 .tuning-editor td, .tuning-editor th { padding: 2px 8px; text-align: left; }
+.tune-panel { margin-top: 10px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.tune-group-label { margin: 0 0 6px; font-size: 1rem; color: var(--muted); }
+.tune-panel > div + div .tune-group-label { margin-top: 12px; }
+.tune-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.tune-course { min-height: 44px; padding: 8px 12px; }
+.tune-course[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.pitch-other { width: 5.5em; }
+.pitch-other[aria-invalid="true"] { border-color: var(--error); }
+.pitch-hint { color: var(--error); font-size: 0.9em; }
 
 @media (max-width: 720px) {
   .menu { display: inline-block; }

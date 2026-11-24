@@ -6,6 +6,7 @@ import { clearOverrides, pinChord, pinTabColumn, removePinsFor, removeStalePins,
 import { LuteSettingsBar } from './LuteSettingsBar';
 import { TuningEditor } from './TuningEditor';
 import { TuningLine } from './TuningLine';
+import { TunePanel, type Tuner } from './TunePanel';
 import { LuteChordBox } from './LuteChordBox';
 import { LuteTabView } from './LuteTabView';
 import { WarningsPanel } from './WarningsPanel';
@@ -16,10 +17,15 @@ export interface LuteViewProps {
   result: LuteResult;
   playing: number | null;
   onPlayChord: (pitches: Midi[]) => void;
+  /** the lute's pitch standard (A4 in Hz) */
+  a4: number;
+  onA4: (a4: number) => void;
+  tuner: Tuner;
 }
 
-export function LuteView({ piece, update, result, playing, onPlayChord }: LuteViewProps) {
+export function LuteView({ piece, update, result, playing, onPlayChord, a4, onA4, tuner }: LuteViewProps) {
   const [editing, setEditing] = useState(false);
+  const [tuneOpen, setTuneOpen] = useState(false);
   const [autoBusy, setAutoBusy] = useState(false);
   const [width, setWidth] = useState(900);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -67,7 +73,11 @@ export function LuteView({ piece, update, result, playing, onPlayChord }: LuteVi
         onAuto={runAuto}
         autoBusy={autoBusy}
         onClearOverrides={() => update(clearOverrides)}
+        a4={a4}
+        onA4={onA4}
+        onTune={() => setTuneOpen((o) => !o)}
       />
+      {tuneOpen && <TunePanel tuning={s.tuning} a4={a4} instrument="lute" tuner={tuner} onClose={() => setTuneOpen(false)} />}
       <TuningLine label="Lute tuning" tuning={s.tuning} testId="lute-tuning-line" />
       {editing && <TuningEditor tuning={s.tuning} onChange={(t) => update((p) => setLuteSettings(p, { tuning: t }))} onClose={() => setEditing(false)} />}
 

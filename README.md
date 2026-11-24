@@ -2,6 +2,8 @@
 
 A web app that converts guitar chord boxes and guitar tab into lute chord boxes and lute tablature (French, Italian or modern notation) for a chosen lute tuning. It runs entirely in the browser, keeps your pieces in the browser's local storage, and can be installed as an app that works offline.
 
+Each side has a **Tune…** panel that plays its open courses, and a pitch standard (A = 440, 415, 392 or your own) used for all its sound.
+
 ## Requirements
 
 - Node.js 22.12 or later, and npm

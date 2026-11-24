@@ -385,3 +385,150 @@ test('the guitar tab scrolls to keep the playing note in view on a phone', async
   expect(scrolled).toBeGreaterThan(0);
   expect(inView).toBe(true);
 });
+
+test('the tuning aid lights a lute course while it rings, then goes out', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('view-lute').click();
+  await page.getByTestId('open-tune').click();
+  await expect(page.getByTestId('tune-panel')).toContainText('Fretted');
+  const c1 = page.getByTestId('tune-course-1');
+  const c2 = page.getByTestId('tune-course-2');
+  await c1.click();
+  await expect(c1).toHaveAttribute('aria-pressed', 'true');
+  await c2.click();
+  await expect(c1).toHaveAttribute('aria-pressed', 'false');
+  await expect(c2).toHaveAttribute('aria-pressed', 'true');
+  // the note is rendered to 6 s; its end report puts the light out
+  await expect(c2).toHaveAttribute('aria-pressed', 'false', { timeout: 8000 });
+});
+
+test('a typed pitch standard is remembered and shown on the buttons', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('view-lute').click();
+  await page.getByTestId('lute-pitch').selectOption('other');
+  await page.getByTestId('lute-pitch-other').fill('430');
+  await page.getByTestId('lute-pitch-other').press('Enter');
+  await page.reload();
+  await page.getByTestId('view-lute').click();
+  await expect(page.getByTestId('lute-pitch')).toHaveValue('other');
+  await expect(page.getByTestId('lute-pitch-other')).toHaveValue('430');
+  await page.getByTestId('open-tune').click();
+  // course 1 of the default lute is G4: 430 × 2^(−2/12)
+  await expect(page.getByTestId('tune-course-1')).toContainText('383.1 Hz');
+  await page.getByTestId('view-guitar').click();
+  await expect(page.getByTestId('guitar-pitch')).toHaveValue('440');
+});
+
+test('closing the tuning panel or switching view leaves tab playback running', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('open-import').click();
+  const lines = ['e|0-1-2-3-4-5-6-7-|', ...['B', 'G', 'D', 'A', 'E'].map((s) => `${s}|----------------|`)];
+  await page.getByTestId('import-text').fill(lines.join('\n'));
+  await page.getByTestId('do-import').click();
+  await page.getByTestId('open-tune').click();
+  await page.getByTestId('play').click();
+  await page.getByTestId('tune-close').click();
+  await expect(page.getByTestId('tune-panel')).toHaveCount(0);
+  await expect(page.getByTestId('stop')).toBeVisible();
+  await page.getByTestId('view-lute').click();
+  await expect(page.getByTestId('stop')).toBeVisible();
+});
+
+test('each side plays every sound at its own standard', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('g2l:pitch:lute', '415');
+    const seen: { rate: number; sr: number }[] = [];
+    (window as unknown as { __rates: typeof seen }).__rates = seen;
+    const make = AudioContext.prototype.createBufferSource;
+    AudioContext.prototype.createBufferSource = function (this: AudioContext) {
+      const src = make.call(this);
+      const start = src.start.bind(src);
+      src.start = (...args: Parameters<AudioBufferSourceNode['start']>) => {
+        seen.push({ rate: src.playbackRate.value, sr: this.sampleRate });
+        return start(...args);
+      };
+      return src;
+    };
+  });
+  /** the standards (of 415 and 440) whose exact-pitch rates explain every sound started since `from` */
+  const standards = async (from: number) => {
+    const rates = await page.evaluate(() => (window as unknown as { __rates: { rate: number; sr: number }[] }).__rates);
+    const fits = (a4: number, { rate, sr }: { rate: number; sr: number }) =>
+      Array.from({ length: 80 }, (_, i) => i + 20).some((m) => {
+        const f = a4 * 2 ** ((m - 69) / 12);
+        return Math.abs(rate - (f * (Math.max(2, Math.round(sr / f)) - 0.5)) / sr) < 1e-6;
+      });
+    const now = rates.slice(from);
+    return { count: now.length, all415: now.every((r) => fits(415, r)), all440: now.every((r) => fits(440, r)), total: rates.length };
+  };
+
+  await page.goto('/');
+  await page.getByTestId('add-chord').click();
+  const box = page.getByTestId('guitar-chordbox').first();
+  for (const id of ['open-0', 'cell-1-1', 'cell-2-2', 'cell-3-2', 'open-4', 'open-5', 'open-5']) await box.getByTestId(id).click(); // Am
+  await page.getByTestId('open-import').click();
+  await page.getByTestId('import-text').fill(TAB.join('\n'));
+  await page.getByTestId('do-import').click();
+
+  // guitar side: chord box and tab at 440
+  let mark = (await standards(0)).total;
+  await box.getByRole('button', { name: 'Play chord' }).click();
+  await page.getByTestId('play').click();
+  await page.waitForTimeout(500);
+  await page.getByTestId('stop').click();
+  let s = await standards(mark);
+  expect(s.count).toBeGreaterThan(0);
+  expect(s.all440).toBe(true);
+  expect(s.all415).toBe(false);
+
+  // lute side: chord box, tab and tuning aid at 415
+  await page.getByTestId('view-lute').click();
+  mark = s.total;
+  await page.getByTestId('lute-chordbox').first().getByRole('button', { name: 'Play chord' }).click();
+  await page.getByTestId('play').click();
+  await page.waitForTimeout(500);
+  await page.getByTestId('stop').click();
+  await page.getByTestId('open-tune').click();
+  await page.getByTestId('tune-course-1').click();
+  s = await standards(mark);
+  expect(s.count).toBeGreaterThan(0);
+  expect(s.all415).toBe(true);
+  expect(s.all440).toBe(false);
+
+  // changing the standard puts the ringing course out at once
+  await expect(page.getByTestId('tune-course-1')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('lute-pitch').selectOption('440');
+  await expect(page.getByTestId('tune-course-1')).toHaveAttribute('aria-pressed', 'false', { timeout: 1000 });
+});
+
+test('changing the tuning stops a ringing course', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('view-lute').click();
+  await page.getByTestId('open-tune').click();
+  const c1 = page.getByTestId('tune-course-1');
+  await c1.click();
+  await expect(c1).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('lute-tuning').selectOption('lute-13-baroque-dm');
+  await expect(c1).toContainText('1 F4');
+  await expect(c1).toHaveAttribute('aria-pressed', 'false', { timeout: 1000 });
+});
+
+test('the Other… pitch box is ready to type in and says when an entry is out of range', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('view-lute').click();
+  await page.getByTestId('lute-pitch').selectOption('other');
+  const box = page.getByTestId('lute-pitch-other');
+  await expect(box).toBeFocused();
+  await page.keyboard.type('4660'); // the selected "440" is replaced
+  await page.keyboard.press('Enter');
+  await expect(box).toHaveValue('4660');
+  await expect(box).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByTestId('lute-pitch-hint')).toHaveText('380–480 Hz');
+  await box.fill('415,3');
+  await box.press('Enter');
+  await expect(box).toHaveAttribute('aria-invalid', 'false');
+  await expect(page.getByTestId('lute-pitch-hint')).toHaveCount(0);
+  await page.reload();
+  await page.getByTestId('view-lute').click();
+  await expect(page.getByTestId('lute-pitch-other')).toHaveValue('415.3');
+});

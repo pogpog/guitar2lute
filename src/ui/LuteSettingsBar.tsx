@@ -1,6 +1,7 @@
 import type { LuteSettings, Notation } from '../core/model';
 import { LUTE_PRESETS, findPreset } from '../core/tunings';
 import { IntField } from './IntField';
+import { PitchControl } from './PitchControl';
 
 export interface LuteSettingsBarProps {
   settings: LuteSettings;
@@ -11,9 +12,14 @@ export interface LuteSettingsBarProps {
   /** Auto is still working out the best transpose */
   autoBusy?: boolean;
   onClearOverrides: () => void;
+  /** the lute's pitch standard (A4 in Hz) */
+  a4: number;
+  onA4: (a4: number) => void;
+  /** open or close the tuning aid */
+  onTune: () => void;
 }
 
-export function LuteSettingsBar({ settings, hasOverrides, onChange, onEditTuning, onAuto, autoBusy = false, onClearOverrides }: LuteSettingsBarProps) {
+export function LuteSettingsBar({ settings, hasOverrides, onChange, onEditTuning, onAuto, autoBusy = false, onClearOverrides, a4, onA4, onTune }: LuteSettingsBarProps) {
   const isPreset = LUTE_PRESETS.some((t) => t.id === settings.tuning.id);
   return (
     <div className="settings-bar" data-testid="lute-settings">
@@ -32,6 +38,8 @@ export function LuteSettingsBar({ settings, hasOverrides, onChange, onEditTuning
         </select>
       </label>
       <button type="button" onClick={onEditTuning}>Edit tuning…</button>
+      <PitchControl a4={a4} onChange={onA4} testId="lute-pitch" />
+      <button type="button" data-testid="open-tune" onClick={onTune}>Tune…</button>
       <label>
         Transpose
         <IntField data-testid="transpose" min={-12} max={12} value={settings.transpose} onCommit={(n) => onChange({ transpose: n })} />

@@ -350,6 +350,8 @@ interface LuteResult { chords: LuteChord[]; tab: (LuteColumn | {kind:'bar'} | {k
 - Play a single chord box (strummed, 30 ms between notes, low to high) by clicking a ▶ on the box.
 - Play the guitar tab or the lute tab: columns scheduled with spacing proportional to `x` offsets at a tempo slider value (default: 1 column-unit = 120 ms); Stop button; the current column is highlighted.
 - Lute playback uses the converted pitches, so the user can compare the two by ear.
+- Each side has its own pitch standard (A = 440, 415, 392 or a typed value, kept on the device) used for all its sound. Every note is played within 2 cents of its exact pitch: the playback rate corrects the pluck's whole-sample period.
+- Tuning aid: a **Tune…** panel on each side plays each open course for about 5 s, so the instrument can be tuned by ear. See `2026-11-24-tuning-aid-design.md`.
 
 ## 9. Persistence and export
 - Autosave the current piece to `localStorage` (debounced 500 ms, and at once when the page is hidden or closed), one key per piece plus an index. Quota errors show a non-blocking banner. An untouched new piece (default or empty title, no chords, no tab) is not saved until something is added, so "New piece" never leaves empty "Untitled" entries; a piece that is already saved keeps being saved even if it is emptied.

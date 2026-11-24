@@ -385,3 +385,51 @@ test('the guitar tab scrolls to keep the playing note in view on a phone', async
   expect(scrolled).toBeGreaterThan(0);
   expect(inView).toBe(true);
 });
+
+test('the tuning aid lights a lute course while it rings, then goes out', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('view-lute').click();
+  await page.getByTestId('open-tune').click();
+  await expect(page.getByTestId('tune-panel')).toContainText('Fretted');
+  const c1 = page.getByTestId('tune-course-1');
+  const c2 = page.getByTestId('tune-course-2');
+  await c1.click();
+  await expect(c1).toHaveAttribute('aria-pressed', 'true');
+  await c2.click();
+  await expect(c1).toHaveAttribute('aria-pressed', 'false');
+  await expect(c2).toHaveAttribute('aria-pressed', 'true');
+  // the note is rendered to 6 s; its end report puts the light out
+  await expect(c2).toHaveAttribute('aria-pressed', 'false', { timeout: 8000 });
+});
+
+test('a typed pitch standard is remembered and shown on the buttons', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('view-lute').click();
+  await page.getByTestId('lute-pitch').selectOption('other');
+  await page.getByTestId('lute-pitch-other').fill('430');
+  await page.getByTestId('lute-pitch-other').press('Enter');
+  await page.reload();
+  await page.getByTestId('view-lute').click();
+  await expect(page.getByTestId('lute-pitch')).toHaveValue('other');
+  await expect(page.getByTestId('lute-pitch-other')).toHaveValue('430');
+  await page.getByTestId('open-tune').click();
+  // course 1 of the default lute is G4: 430 × 2^(−2/12)
+  await expect(page.getByTestId('tune-course-1')).toContainText('383.1 Hz');
+  await page.getByTestId('view-guitar').click();
+  await expect(page.getByTestId('guitar-pitch')).toHaveValue('440');
+});
+
+test('closing the tuning panel or switching view leaves tab playback running', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('open-import').click();
+  const lines = ['e|0-1-2-3-4-5-6-7-|', ...['B', 'G', 'D', 'A', 'E'].map((s) => `${s}|----------------|`)];
+  await page.getByTestId('import-text').fill(lines.join('\n'));
+  await page.getByTestId('do-import').click();
+  await page.getByTestId('open-tune').click();
+  await page.getByTestId('play').click();
+  await page.getByTestId('tune-close').click();
+  await expect(page.getByTestId('tune-panel')).toHaveCount(0);
+  await expect(page.getByTestId('stop')).toBeVisible();
+  await page.getByTestId('view-lute').click();
+  await expect(page.getByTestId('stop')).toBeVisible();
+});

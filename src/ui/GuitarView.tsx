@@ -11,6 +11,8 @@ import { WarningsPanel } from './WarningsPanel';
 import { IntField } from './IntField';
 import { GuitarTuningEditor } from './GuitarTuningEditor';
 import { TuningLine } from './TuningLine';
+import { PitchControl } from './PitchControl';
+import { TunePanel, type Tuner } from './TunePanel';
 
 export interface GuitarViewProps {
   piece: Piece;
@@ -19,10 +21,15 @@ export interface GuitarViewProps {
   /** index of the playing tab column, or null */
   playing?: number | null;
   onPlayChord: (pitches: Midi[]) => void;
+  /** the guitar's pitch standard (A4 in Hz) */
+  a4: number;
+  onA4: (a4: number) => void;
+  tuner: Tuner;
 }
 
-export function GuitarView({ piece, update, flats, playing = null, onPlayChord }: GuitarViewProps) {
+export function GuitarView({ piece, update, flats, playing = null, onPlayChord, a4, onA4, tuner }: GuitarViewProps) {
   const [importing, setImporting] = useState(false);
+  const [tuneOpen, setTuneOpen] = useState(false);
   const [editingTuning, setEditingTuning] = useState(false);
   // Recomputed from the stored source text (parsing is deterministic), so the last import's
   // warnings survive switching views and reloading.
@@ -47,11 +54,14 @@ export function GuitarView({ piece, update, flats, playing = null, onPlayChord }
           </select>
         </label>
         <button type="button" data-testid="edit-guitar-tuning" onClick={() => setEditingTuning((e) => !e)}>Edit tuning…</button>
+        <PitchControl a4={a4} onChange={onA4} testId="guitar-pitch" />
+        <button type="button" data-testid="open-tune" onClick={() => setTuneOpen((o) => !o)}>Tune…</button>
         <label>
           Capo
           <IntField min={0} max={12} value={g.capo} onCommit={(n) => update((p) => setCapo(p, n))} />
         </label>
       </div>
+      {tuneOpen && <TunePanel tuning={g.tuning} a4={a4} instrument="guitar" tuner={tuner} onClose={() => setTuneOpen(false)} />}
       <TuningLine label="Guitar tuning" tuning={g.tuning} testId="guitar-tuning-line" />
       {editingTuning && (
         <GuitarTuningEditor

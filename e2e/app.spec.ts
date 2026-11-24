@@ -362,3 +362,26 @@ test('changing the speed during playback slows the notes still to come', async (
   // slowed: 0.1 + 7 × 0.6 + 1.5 = 5.8 s
   await expect(page.getByTestId('play')).toBeVisible({ timeout: 3000 });
 });
+
+test('the guitar tab scrolls to keep the playing note in view on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto('/');
+  await page.getByTestId('open-import').click();
+  const frets = Array.from({ length: 80 }, (_, i) => String(i % 10)).join('-');
+  const lines = [`e|${frets}-|`, ...['B', 'G', 'D', 'A', 'E'].map((s) => `${s}|${'-'.repeat(frets.length + 1)}|`)];
+  await page.getByTestId('import-text').fill(lines.join('\n'));
+  await page.getByTestId('do-import').click();
+  await page.getByLabel('Speed').fill('300'); // fastest: 40 ms a character, 80 ms a note
+  await page.getByTestId('play').click();
+  const tabs = page.getByTestId('guitar-tab');
+  // well past the first screenful (about 20 notes fit on screen)
+  await page.waitForTimeout(4000);
+  const { scrolled, inView } = await tabs.evaluate((el) => {
+    const mark = el.querySelector('mark.playing');
+    const box = el.getBoundingClientRect();
+    const m = mark?.getBoundingClientRect();
+    return { scrolled: el.scrollLeft, inView: !!m && m.left >= box.left && m.right <= box.right };
+  });
+  expect(scrolled).toBeGreaterThan(0);
+  expect(inView).toBe(true);
+});

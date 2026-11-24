@@ -1,4 +1,6 @@
+import { useEffect, useRef } from 'react';
 import type { TabEvent, Tuning } from '../core/model';
+import { followPlayingNote } from './followPlayhead';
 import { layoutAsciiSystem, splitSystems, systemOrigins, tuningLabels } from '../core/asciiRender';
 
 interface GuitarTabViewProps {
@@ -9,6 +11,10 @@ interface GuitarTabViewProps {
 }
 
 export function GuitarTabView({ events, tuning, playing = null }: GuitarTabViewProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (playing !== null && ref.current) followPlayingNote(ref.current);
+  }, [playing]);
   const systems = splitSystems(events);
   const origins = systemOrigins(events);
   if (!systems.length) {
@@ -17,7 +23,7 @@ export function GuitarTabView({ events, tuning, playing = null }: GuitarTabViewP
   const labels = tuningLabels(tuning);
   let first = 0; // column index of each system's first column
   return (
-    <div className="ascii-tabs" data-testid="guitar-tab">
+    <div className="ascii-tabs" data-testid="guitar-tab" ref={ref}>
       {systems.map((sys, i) => {
         const { rows, spans } = layoutAsciiSystem(sys, labels, origins[i]);
         const local = playing === null ? -1 : playing - first;

@@ -512,3 +512,23 @@ test('changing the tuning stops a ringing course', async ({ page }) => {
   await expect(c1).toContainText('1 F4');
   await expect(c1).toHaveAttribute('aria-pressed', 'false', { timeout: 1000 });
 });
+
+test('the Other… pitch box is ready to type in and says when an entry is out of range', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('view-lute').click();
+  await page.getByTestId('lute-pitch').selectOption('other');
+  const box = page.getByTestId('lute-pitch-other');
+  await expect(box).toBeFocused();
+  await page.keyboard.type('4660'); // the selected "440" is replaced
+  await page.keyboard.press('Enter');
+  await expect(box).toHaveValue('4660');
+  await expect(box).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByTestId('lute-pitch-hint')).toHaveText('380–480 Hz');
+  await box.fill('415,3');
+  await box.press('Enter');
+  await expect(box).toHaveAttribute('aria-invalid', 'false');
+  await expect(page.getByTestId('lute-pitch-hint')).toHaveCount(0);
+  await page.reload();
+  await page.getByTestId('view-lute').click();
+  await expect(page.getByTestId('lute-pitch-other')).toHaveValue('415.3');
+});

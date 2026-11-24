@@ -65,7 +65,8 @@ The pitch control sits in the settings bar, not in the panel, because it changes
 - **Without local storage:** if local storage is unavailable (private mode), the standard lasts only for the session, the same way pieces already do.
 - **Other… box:**
   - It accepts 380–480 Hz with up to one decimal place, which covers the historical standards in use.
-  - Anything outside that range, or not a number, is rejected and the previous value is kept.
+  - Anything outside that range, or not a number, is rejected and the previous value is kept. The entry stays in the box, marked invalid, with a short "380–480 Hz" hint, so it can be corrected.
+  - Choosing "Other…" puts the cursor in the box with its value selected, so typing replaces it.
   - When the stored value isn't 440, 415 or 392, the drop-down shows "Other…" with the value in the box.
 - **Same sound:**
   - The tuning note uses the same plucked-string sound as playback, tuned to the standard.

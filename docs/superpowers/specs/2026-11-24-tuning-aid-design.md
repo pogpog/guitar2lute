@@ -71,14 +71,23 @@ The pitch control sits in the settings bar, not in the panel, because it changes
   - It rings audibly for about 5 seconds on every course. The sound fades much faster on high notes than on low ones, so each note's fade is set from its pitch so that every course reaches the same quiet level at about 5 seconds.
   - Tab and chord notes keep their current length and fade.
 - **Exact pitch:**
-  - The plucked-string sound can only make certain frequencies, and its own half-sample delay adds to the error.
-  - Measured, the error reaches 15 cents flat (for example A4 at A = 392 on a 44.1 kHz device). It is within 2 cents on the low courses.
-  - Each sound is played very slightly faster or slower to land on the exact frequency, allowing for that half-sample delay. This also corrects existing playback.
+  - The plucked-string sound repeats every whole number of samples, less the half sample its smoothing step takes. The note actually sounds at `sampleRate / (period − 0.5)`.
+  - This was checked by measuring rendered notes: it agrees to 0.01 cents at 98–660 Hz, 44.1 and 48 kHz, and for any fade.
+  - Today's notes are therefore sharp: for example, 12.6 cents sharp for A4 at 440 on a 44.1 kHz device, and up to about 25 cents on the top strings.
+  - Each sound is played very slightly slower or faster (its playback rate) to land on the exact frequency. This also corrects existing playback.
 - **One player:**
   - The app keeps its single player.
   - Every play call passes in the pitch standard of the side it comes from.
-  - Stored sounds are kept per note and standard, because the guitar's A2 at 440 and the lute's A2 at 415 are different sounds.
+  - Stored sounds are kept per note, standard and kind of sound. The kinds are the playback pluck (2.5 s, today's fade) and the tuning note (about 5 s, fade set from the pitch). One kind must never be served for the other.
   - Stored sounds aren't cleared when the standard changes, so notes already scheduled keep their pitch.
+  - The store is capped by count, dropping the least recently used sound. Dropping a stored sound is safe, because a note already scheduled keeps its own copy. This stops comparing many "Other…" standards from filling a phone's memory.
+- **Stopping only the tuning note:**
+  - The player gains a way to stop just the tuning note.
+  - Closing the panel, changing the view and changing the standard use it, so tab playback carries on as it does today when you switch views.
+  - Tapping a course, Play and a chord box still stop everything, as before.
+- **Note ends:**
+  - The player reports the end of a tuning note when its sound finishes or is stopped.
+  - Each tuning note carries its own number. An end report for a note other than the current one is ignored, so a stopped note's late report can't put out the light of the note that replaced it.
 - **Tapping:**
   - Tapping a course stops whatever is sounding, including tab playback, and plays that course alone.
   - Tapping the ringing course again replays it.
@@ -87,15 +96,18 @@ The pitch control sits in the settings bar, not in the panel, because it changes
   - when its note ends, as reported by the player when the sound finishes, not by a separate timer;
   - when another course is tapped;
   - when Play or a chord box starts other sound;
-  - when the panel closes or the view changes. Closing the panel or changing the view also stops the note.
-- **Screen awake:** while the panel is open, the screen is kept awake, where the browser supports it. Tuning takes minutes, and a phone that locks stops the sound.
-- **Changing the standard during playback:** the new standard applies from the next Play. The notes already scheduled don't retune.
+  - when the panel closes, the view changes or the side's standard changes. Each of these also stops the tuning note, and only the tuning note.
+- **Screen awake:**
+  - While the panel is open, the screen is kept awake, where the browser supports it. Tuning takes minutes, and a phone that locks stops the sound.
+  - The browser drops the wake lock whenever the page is hidden, for example when the notification shade is pulled down. It is taken again when the page becomes visible and the panel is still open.
+- **Changing the standard during playback:** the new standard applies from the next Play. The notes already scheduled don't retune. A ringing tuning note stops, so the buttons never show one frequency while another is sounding.
 - **Guitar capo:** the guitar tuning aid plays the open strings without the capo, because you tune before putting the capo on.
 - **Pitch spelling:** the panel spells pitches the same way the tuning line does (e.g. "E♭2").
 
 ## Left to the builder
 
-- The exact fade target for the 5-second ring, within "clearly audible to about 5 seconds".
+- The exact fade, within the audibility test below.
+- The size of the stored-sound cap.
 - Panel styling, within the existing look.
 - Test IDs.
 
@@ -107,9 +119,21 @@ The pitch control sits in the settings bar, not in the panel, because it changes
   - the panel groups and labels for 6-, 8- and 13-course lutes and for guitar;
   - the player using the side's standard;
   - a lute at 415: tab and chord playback on the lute side is at 415, never at 440;
-  - the pitch actually produced, measured from the rendered sound, is within 2 cents at several notes, standards and sample rates (44.1 and 48 kHz);
-  - every course's tuning note is still audible at about 5 seconds;
-  - the lit button goes out when the note ends, on another tap, on Play and on close.
+  - **Pitch:**
+    - Unit tests can't hear the browser's playback rate.
+    - The tests measure the fundamental of the raw rendered sound, multiply it by the playback rate the player computes, and check the result is within 2 cents of the target.
+    - They cover several notes (lowest diapason to top string), standards, and sample rates (44.1 and 48 kHz), for both kinds of sound.
+  - **Audibility:**
+    - Every tuning note, top course to lowest diapason, has a level in the 250 ms before 5 s no more than 30 dB below its level in the first 250 ms.
+    - The sound is rendered to 6 s, so it fades out rather than being cut off at that level.
+  - **Kinds of sound:**
+    - Playing a tuning note and then tab of the same note gives the 2.5 s pluck.
+    - The other order gives the 5 s note.
+  - **Lit button:**
+    - The lit button goes out when the note ends, on another tap, on Play, on close and on a change of standard.
+    - A stopped note's late end report doesn't put out the next note's light.
+  - **Targeted stop:** closing the panel or switching views during tab playback leaves the tab playing.
+  - **Stored-sound cap:** the store never grows past its cap.
 - **Browser test:**
   - open **Tune…**, tap a course and see its button lit;
   - choose "Other…", enter a value and see it remembered after a reload.

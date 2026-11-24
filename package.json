@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview --port 4173 --strictPort",
+    "preview:https": "vite build && PREVIEW_HTTPS_DIR=$HOME/.config/guitar-to-lute/https vite preview --host --port 4173 --strictPort",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json",

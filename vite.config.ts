@@ -1,4 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { defineConfig } from 'vitest/config';
+
+// `npm run preview:https` serves the build over HTTPS (needed to install the app on a phone) with a
+// key and certificate from this directory; see README "Install on a phone".
+const httpsDir = process.env.PREVIEW_HTTPS_DIR;
+const https = httpsDir
+  ? { key: readFileSync(join(httpsDir, 'server.key')), cert: readFileSync(join(httpsDir, 'server.crt')) }
+  : undefined;
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -28,6 +37,7 @@ export default defineConfig({
       },
     }),
   ],
+  preview: { https },
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],

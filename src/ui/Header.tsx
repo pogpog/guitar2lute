@@ -21,7 +21,7 @@ export function Header(props: HeaderProps) {
   return (
     <header className="header">
       <button type="button" className="icon-btn menu" aria-label="Show saved pieces" onClick={onToggleSidebar}>☰</button>
-      <span className="brand">Guitar → Lute</span>
+      <span className="brand">Guitar2Lute</span>
       <input className="title" aria-label="Piece title" value={title} onChange={(e) => onTitle(e.target.value)} />
       <div className="segmented" role="radiogroup" aria-label="View">
         {(['guitar', 'lute'] as const).map((v) => (

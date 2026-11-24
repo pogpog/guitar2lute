@@ -18,8 +18,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'icon-192.png', 'icon-512.png'],
       manifest: {
-        name: 'Guitar to Lute',
-        short_name: 'Guitar→Lute',
+        name: 'Guitar2Lute',
+        short_name: 'Guitar2Lute',
         description: 'Convert guitar chord boxes and tab to lute tablature',
         theme_color: '#6b4423',
         background_color: '#fbf7ef',

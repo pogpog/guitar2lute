@@ -1,4 +1,4 @@
-# Guitar → Lute Converter (PWA) — Design
+# Guitar2Lute Converter (PWA) — Design
 
 Date: 2026-11-19
 Status: Draft for review

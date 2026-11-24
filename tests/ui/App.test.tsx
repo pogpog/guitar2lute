@@ -20,7 +20,7 @@ describe('ErrorBoundary', () => {
 describe('App', () => {
   it('starts with a new untitled piece in the guitar view', () => {
     const out = html(<App storage={new MemoryStorage()} />);
-    expect(out).toContain('Guitar → Lute');
+    expect(out).toContain('Guitar2Lute');
     expect(out).toContain('value="Untitled"');
     expect(out).toContain('data-testid="add-chord"');
   });
@@ -41,6 +41,6 @@ describe('App', () => {
   it('starts even when the saved index has the wrong shape', () => {
     const s = new MemoryStorage();
     s.setItem('g2l:index', JSON.stringify([{ id: 'a', title: { x: 1 } }, { id: 'b', title: [{}] }]));
-    expect(html(<App storage={s} />)).toContain('Guitar → Lute');
+    expect(html(<App storage={s} />)).toContain('Guitar2Lute');
   });
 });

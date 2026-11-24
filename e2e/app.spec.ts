@@ -160,7 +160,7 @@ test('works offline after the first visit', async ({ page, context }) => {
   await page.reload();
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByText('Guitar → Lute')).toBeVisible();
+  await expect(page.getByText('Guitar2Lute')).toBeVisible();
   await expect(page.getByTestId('add-chord')).toBeVisible();
 });
 

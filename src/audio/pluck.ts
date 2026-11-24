@@ -1,12 +1,44 @@
 import type { Midi } from '../core/model';
 
-export function midiToFreq(m: number): number {
-  return 440 * Math.pow(2, (m - 69) / 12);
+/** Frequency of MIDI note `m` with A4 at `a4` Hz. */
+export function midiToFreq(m: number, a4 = 440): number {
+  return a4 * Math.pow(2, (m - 69) / 12);
+}
+
+/** The whole number of samples `karplusStrong` loops over for `freq`. */
+export function ksPeriod(freq: number, sampleRate: number): number {
+  return Math.max(2, Math.round(sampleRate / freq));
+}
+
+/**
+ * Playback rate that puts a `karplusStrong` buffer exactly on `freq`. The buffer repeats every
+ * `period` samples less the half sample its averaging step takes (each new sample is the mean of
+ * one sample and the next), so it sounds at `sampleRate / (period - 0.5)`: measured to 0.01 cents.
+ */
+export function playbackRateFor(freq: number, sampleRate: number): number {
+  return (freq * (ksPeriod(freq, sampleRate) - 0.5)) / sampleRate;
+}
+
+/** Length a tuning note is rendered to, and how long it rings clearly. */
+export const TUNING_SECONDS = 6;
+export const TUNING_RING = 5;
+
+/** Loop gain that lowers a tuning note's fundamental by 10 dB over TUNING_RING, whatever its pitch. */
+export function tuningDecay(freq: number): number {
+  return 10 ** (-10 / (20 * TUNING_RING * freq));
+}
+
+/** The long, slowly fading pluck the tuning aid plays, faded to silence over its last half second. */
+export function renderTuningNote(freq: number, sampleRate: number, rand: () => number = Math.random): Float32Array {
+  const out = karplusStrong(freq, sampleRate, TUNING_SECONDS, tuningDecay(freq), rand);
+  const fade = Math.floor(sampleRate * 0.5);
+  for (let i = 0; i < fade; i++) out[out.length - fade + i] *= 1 - (i + 1) / fade;
+  return out;
 }
 
 export function karplusStrong(freq: number, sampleRate: number, seconds: number, decay = 0.996, rand: () => number = Math.random): Float32Array {
   const n = Math.floor(sampleRate * seconds);
-  const period = Math.max(2, Math.round(sampleRate / freq));
+  const period = ksPeriod(freq, sampleRate);
   const ring = new Float32Array(period);
   for (let i = 0; i < period; i++) ring[i] = rand() * 2 - 1;
   const out = new Float32Array(n);

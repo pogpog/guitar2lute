@@ -105,8 +105,8 @@ describe('Player', () => {
   it('tells the tab listener that playback ended when a chord interrupts it', () => {
     const p = new Player();
     const seen: (number | null)[] = [];
-    p.playSteps([{ time: 0, pitches: [60], index: 3 }], (i) => seen.push(i));
-    p.playChord([64]);
+    p.playSteps([{ time: 0, pitches: [60], index: 3 }], (i) => seen.push(i), 440);
+    p.playChord([64], 440);
     expect(seen).toEqual([null]);
     p.stop();
     expect(seen).toEqual([null]);
@@ -116,7 +116,7 @@ describe('Player', () => {
     it('keeps played notes and reschedules the rest from the current position', () => {
       const p = new Player();
       const seen: (number | null)[] = [];
-      p.playSteps(steps, (i) => seen.push(i));
+      p.playSteps(steps, (i) => seen.push(i), 440);
       // t0 = 0.1; 1.5 s into the piece
       vi.advanceTimersByTime(1600);
       ctx.currentTime = 1.6;
@@ -140,7 +140,7 @@ describe('Player', () => {
     it('does nothing when nothing is playing', () => {
       const p = new Player();
       p.setSpeed(2);
-      p.playSteps(steps, () => {});
+      p.playSteps(steps, () => {}, 440);
       p.stop();
       p.setSpeed(0.5);
       expect(made.filter((m) => !m.stopped)).toEqual([]);
@@ -165,11 +165,6 @@ describe('Player', () => {
       expect(last().rate).toBeCloseTo(playbackRateFor(midiToFreq(60, 440), 8000));
       p.playSteps([{ time: 0, pitches: [62], index: 0 }], () => {}, 392);
       expect(last().rate).toBeCloseTo(playbackRateFor(midiToFreq(62, 392), 8000));
-    });
-    it('defaults to A = 440', () => {
-      const p = new Player();
-      p.playChord([60]);
-      expect(last().rate).toBeCloseTo(playbackRateFor(midiToFreq(60, 440), 8000));
     });
   });
 
@@ -208,7 +203,7 @@ describe('Player', () => {
     it('stopTuningNote leaves tab playback running', () => {
       const p = new Player();
       const seen: (number | null)[] = [];
-      p.playSteps(steps, (i) => seen.push(i));
+      p.playSteps(steps, (i) => seen.push(i), 440);
       p.stopTuningNote();
       expect(made.filter((m) => m.stopped)).toEqual([]);
       expect(seen).not.toContain(null);
@@ -231,7 +226,7 @@ describe('Player', () => {
     it('stops tab playback when a course is tapped', () => {
       const p = new Player();
       const seen: (number | null)[] = [];
-      p.playSteps(steps, (i) => seen.push(i));
+      p.playSteps(steps, (i) => seen.push(i), 440);
       p.playTuningNote(60, 415, () => {});
       expect(seen).toEqual([null]);
       expect(last().rate).toBeCloseTo(playbackRateFor(midiToFreq(60, 415), 8000));

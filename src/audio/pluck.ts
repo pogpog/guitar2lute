@@ -147,13 +147,13 @@ export class Player {
     this.sources.push({ src: this.sound(ctx, 'pluck', m, a4, when), when });
   }
 
-  playChord(pitches: Midi[], a4 = 440): void {
+  playChord(pitches: Midi[], a4: number): void {
     this.stop();
     const ctx = this.ensure();
     [...pitches].sort((a, b) => a - b).forEach((m, i) => this.pluck(ctx, m, ctx.currentTime + 0.05 + i * 0.03, a4));
   }
 
-  playSteps(steps: Step[], onStep: (index: number | null) => void, a4 = 440): void {
+  playSteps(steps: Step[], onStep: (index: number | null) => void, a4: number): void {
     this.stop();
     if (!steps.length) return;
     this.onStep = onStep;

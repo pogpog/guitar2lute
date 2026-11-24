@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   LUTE_PRESETS, GUITAR_PRESETS, findPreset, guitarTuningByName, inferGuitarTuning, guitarTuningFromCourses,
   addBassCourse, removeBassCourse, setCoursePitch, setFrettedCourses, setGuitarStringPitch, courseLabels,
+  tuneGroups, STANDARD_GUITAR,
 } from '../../src/core/tunings';
 
 describe('tuning presets', () => {
@@ -105,5 +106,22 @@ describe('guitarTuningFromCourses', () => {
   it('matches a preset or builds a custom tuning', () => {
     expect(guitarTuningFromCourses([64, 59, 55, 50, 45, 38]).id).toBe('guitar-drop-d');
     expect(guitarTuningFromCourses([64, 59, 55, 50, 45, 37]).id).toBe('guitar-custom');
+  });
+});
+
+describe('tuneGroups', () => {
+  it('groups lute courses fretted first, then diapasons, ascending', () => {
+    const g = tuneGroups(findPreset('lute-8-g')!, 'lute');
+    expect(g.map((x) => x.label)).toEqual(['Fretted', 'Diapasons']);
+    expect(g[0].courses.map((c) => c.course)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(g[1].courses.map((c) => c.course)).toEqual([8]);
+    expect(g[1].courses[0]).toMatchObject({ name: 'D2', midi: 38, diapason: true });
+    expect(tuneGroups(findPreset('lute-6-g')!, 'lute').map((x) => x.label)).toEqual(['Fretted']);
+    expect(tuneGroups(findPreset('lute-13-baroque-dm')!, 'lute')[1].courses).toHaveLength(7);
+  });
+  it('puts every guitar string in one group', () => {
+    const g = tuneGroups(STANDARD_GUITAR, 'guitar');
+    expect(g.map((x) => x.label)).toEqual(['Strings']);
+    expect(g[0].courses.map((c) => c.name)).toEqual(['E4', 'B3', 'G3', 'D3', 'A2', 'E2']);
   });
 });

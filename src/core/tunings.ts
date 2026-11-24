@@ -152,3 +152,21 @@ export function courseLabels(t: Tuning): CourseLabel[] {
     diapason: i >= t.frettedCourses,
   }));
 }
+
+export interface TuneCourse extends CourseLabel {
+  midi: Midi;
+}
+
+/**
+ * The tuning aid's groups of open courses, each ascending from course 1: a lute's fretted courses
+ * then its diapasons (left out when there are none), or a guitar's strings as one group.
+ */
+export function tuneGroups(t: Tuning, instrument: 'lute' | 'guitar'): { label: string; courses: TuneCourse[] }[] {
+  const all = courseLabels(t).map((c) => ({ ...c, midi: t.courses[c.course - 1] }));
+  if (instrument === 'guitar') return [{ label: 'Strings', courses: all }];
+  const groups = [
+    { label: 'Fretted', courses: all.filter((c) => !c.diapason) },
+    { label: 'Diapasons', courses: all.filter((c) => c.diapason) },
+  ];
+  return groups.filter((g) => g.courses.length > 0);
+}

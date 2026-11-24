@@ -500,3 +500,15 @@ test('each side plays every sound at its own standard', async ({ page }) => {
   await page.getByTestId('lute-pitch').selectOption('440');
   await expect(page.getByTestId('tune-course-1')).toHaveAttribute('aria-pressed', 'false', { timeout: 1000 });
 });
+
+test('changing the tuning stops a ringing course', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('view-lute').click();
+  await page.getByTestId('open-tune').click();
+  const c1 = page.getByTestId('tune-course-1');
+  await c1.click();
+  await expect(c1).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('lute-tuning').selectOption('lute-13-baroque-dm');
+  await expect(c1).toContainText('1 F4');
+  await expect(c1).toHaveAttribute('aria-pressed', 'false', { timeout: 1000 });
+});

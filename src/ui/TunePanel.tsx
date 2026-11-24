@@ -37,6 +37,10 @@ export function TunePanel({ tuning, a4, instrument, tuner, onClose }: TunePanelP
     };
   }, []);
 
+  // a new tuning relabels the buttons, so the old note mustn't keep sounding under a new name
+  const courses = tuning.courses.join(',');
+  useEffect(() => () => tunerRef.current.stop(), [courses]);
+
   const tap = (c: TuneCourse) => {
     tuner.play(c.midi, () => setLit((l) => (l === c.course ? null : l)));
     setLit(c.course);

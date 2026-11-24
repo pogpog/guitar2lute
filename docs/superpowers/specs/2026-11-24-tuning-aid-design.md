@@ -98,7 +98,7 @@ The pitch control sits in the settings bar, not in the panel, because it changes
   - when its note ends, as reported by the player when the sound finishes, not by a separate timer. The sound is rendered to 6 s, so the light stays on up to about a second after the ring has become hard to hear. This is accepted; do not add a timer to shorten it;
   - when another course is tapped;
   - when Play or a chord box starts other sound;
-  - when the panel closes, the view changes or the side's standard changes. Each of these also stops the tuning note, and only the tuning note.
+  - when the panel closes, the view changes, the side's standard changes or its tuning changes. Each of these also stops the tuning note, and only the tuning note.
 - **Screen awake:**
   - While the panel is open, the screen is kept awake, where the browser supports it. Tuning takes minutes, and a phone that locks stops the sound.
   - The browser drops the wake lock whenever the page is hidden, for example when the notification shade is pulled down. It is taken again when the page becomes visible and the panel is still open.

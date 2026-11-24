@@ -15,7 +15,7 @@ The player tunes a real lute by ear from the app. Each open course of the select
   - Each group has its label on a line above its buttons, which leaves the full width for the buttons.
   - Within each group, courses run from 1 upwards. This is the opposite order to the tuning line, which lists low to high.
   - The panel opens inline below the settings bar, the same way **Edit tuning…** does, and pushes the content below it down. It has a Close button. On a phone a 13-course lute's panel is taller than the screen, and the page scrolls.
-- **Guitar panel layout:** one group of strings, 1 to 6. The guitar has no diapasons.
+- **Guitar panel layout:** one group of strings, 1 to 6, labelled "Strings" above the buttons. The guitar has no diapasons.
 - **Pitch accuracy:** every note, whether from the tuning aid, tab playback or a chord box, lands within 2 cents of its exact frequency at the side's standard.
 - **Pitch setting:** each side's settings bar gets a **Pitch** control next to **Edit tuning…**.
   - It is a drop-down with "A = 440", "A = 415", "A = 392" and "Other…".
@@ -61,6 +61,7 @@ The pitch control sits in the settings bar, not in the panel, because it changes
 
 - **Saved per device:** each standard is remembered per device under its own local-storage key, separate from pieces. Backups of pieces don't include it.
 - **Storage keys:** `g2l:pitch:lute` and `g2l:pitch:guitar`, following the existing `g2l:` key convention.
+- **Default:** a device with nothing stored, or with a stored value that fails validation, uses A = 440 on both sides. 440 is what playback uses today, so nothing changes until the player picks another standard.
 - **Without local storage:** if local storage is unavailable (private mode), the standard lasts only for the session, the same way pieces already do.
 - **Other… box:**
   - It accepts 380–480 Hz with up to one decimal place, which covers the historical standards in use.
@@ -93,7 +94,7 @@ The pitch control sits in the settings bar, not in the panel, because it changes
   - Tapping the ringing course again replays it.
   - Only one tuning note sounds at a time.
 - **When a lit button goes out:**
-  - when its note ends, as reported by the player when the sound finishes, not by a separate timer;
+  - when its note ends, as reported by the player when the sound finishes, not by a separate timer. The sound is rendered to 6 s, so the light stays on up to about a second after the ring has become hard to hear. This is accepted; do not add a timer to shorten it;
   - when another course is tapped;
   - when Play or a chord box starts other sound;
   - when the panel closes, the view changes or the side's standard changes. Each of these also stops the tuning note, and only the tuning note.

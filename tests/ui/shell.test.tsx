@@ -47,7 +47,7 @@ describe('Header', () => {
       <Header title="My piece" onTitle={noop} view="guitar" onView={noop} playing={false} onPlay={noop} onStop={noop}
         msPerUnit={120} onTempo={noop} onExport={noop} onImportJson={noop} onToggleSidebar={noop} />,
     );
-    expect(out).toContain('Guitar → Lute');
+    expect(out).toContain('Guitar2Lute');
     expect(out).toContain('value="My piece"');
     expect(out).toMatch(/data-testid="view-guitar"[^>]*aria-checked="true"|aria-checked="true"[^>]*data-testid="view-guitar"/);
     expect(out).toContain('Lute TabCode (.tc)');

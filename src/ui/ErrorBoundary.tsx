@@ -21,7 +21,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     } catch {
       // storage unavailable: download what we have (nothing)
     }
-    downloadText('guitar-to-lute-saved-data.json', JSON.stringify(data, null, 2), 'application/json');
+    downloadText('guitar2lute-saved-data.json', JSON.stringify(data, null, 2), 'application/json');
   };
 
   render() {

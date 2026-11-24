@@ -1,4 +1,4 @@
-# Guitar to Lute
+# Guitar2Lute
 
 A web app that converts guitar chord boxes and guitar tab into lute chord boxes and lute tablature (French, Italian or modern notation) for a chosen lute tuning. It runs entirely in the browser, keeps your pieces in the browser's local storage, and can be installed as an app that works offline.
 
@@ -36,6 +36,7 @@ Open http://localhost:4173. This is the same app you would deploy, including off
 Android only offers to install the app, and the app only works offline, when it is served over HTTPS or from `localhost`. Two ways to get that:
 
 - **From your computer over USB:** run `npm run build && npm run preview`, connect the phone with USB debugging on, then run `adb reverse tcp:4173 tcp:4173`. Open http://localhost:4173 in Chrome on the phone and choose **Install app** (or **Add to Home screen**) from the menu.
+- **Over HTTPS on your home network:** run `scripts/make-https-cert.sh <your computer's IP>` once. On the phone, install `~/.config/guitar2lute/https/guitar2lute-ca.crt` as a CA certificate (Settings → Security & privacy → More security settings → Encryption & credentials → Install a certificate → CA certificate). Then run `npm run preview:https`, let port 4173 through the firewall if you have one (`sudo ufw allow from 192.168.1.0/24 to any port 4173 proto tcp`), open `https://<your computer's IP>:4173` in Chrome on the phone and choose **Install app**. The certificate authority the script makes can only vouch for addresses on your home network, and its key is deleted once the server certificate is signed. Run the script again if your computer's IP changes.
 - **From a web host:** `npm run build` writes a static site to `dist/`. Upload that folder to any static host that serves HTTPS (GitHub Pages, Netlify, Cloudflare Pages and so on), at the root of the domain, then open it in Chrome on the phone and install it.
 
 `npm run preview -- --host` also makes the app reachable from other devices on your network. Over plain HTTP it still works in the browser there, but it can't be installed or used offline.

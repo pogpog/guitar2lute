@@ -59,7 +59,7 @@ export function App({ storage }: { storage?: StorageLike }) {
         downloadText(`${name}.json`, exportPieces([piece]), 'application/json');
         return;
       case 'json-all':
-        downloadText('guitar-to-lute-pieces.json', exportPieces(s.allPieces()), 'application/json');
+        downloadText('guitar2lute-pieces.json', exportPieces(s.allPieces()), 'application/json');
         return;
       case 'tabcode':
         downloadText(`${name}.tc`, toTabCode(result, piece.title), 'text/plain');

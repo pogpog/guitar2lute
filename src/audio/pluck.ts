@@ -29,19 +29,56 @@ export function tuningDecay(freq: number): number {
   return 10 ** (-10 / (20 * TUNING_RING * freq));
 }
 
-/** The long, slowly fading pluck the tuning aid plays, faded to silence over its last half second. */
+/** Level of `buf` in the quarter second before TUNING_RING against its first quarter second, in dB. */
+function ringLevel(buf: Float32Array, sampleRate: number): number {
+  const q = Math.floor(sampleRate * 0.25);
+  const end = Math.floor(sampleRate * TUNING_RING);
+  const power = (from: number, to: number) => {
+    let sum = 0;
+    for (let i = from; i < to; i++) sum += buf[i] * buf[i];
+    return sum / (to - from);
+  };
+  return 10 * Math.log10(power(end - q, end) / power(0, q));
+}
+
+/** A random pluck whose ring at TUNING_RING is at least this far below its start is drawn again. */
+const WEAK_RING_DB = -26;
+
+/**
+ * The long, slowly fading pluck the tuning aid plays, faded to silence over its last half second.
+ * How much of a high note is left at 5 s depends on its random noise burst, so a burst that leaves
+ * a weak ring is drawn again (up to 8 times, keeping the strongest).
+ */
 export function renderTuningNote(freq: number, sampleRate: number, rand: () => number = Math.random): Float32Array {
-  const out = karplusStrong(freq, sampleRate, TUNING_SECONDS, tuningDecay(freq), rand);
+  let out = karplusStrong(freq, sampleRate, TUNING_SECONDS, tuningDecay(freq), rand, true);
+  let level = ringLevel(out, sampleRate);
+  for (let tries = 1; tries < 8 && level < WEAK_RING_DB; tries++) {
+    const next = karplusStrong(freq, sampleRate, TUNING_SECONDS, tuningDecay(freq), rand, true);
+    const l = ringLevel(next, sampleRate);
+    if (l > level) [out, level] = [next, l];
+  }
   const fade = Math.floor(sampleRate * 0.5);
   for (let i = 0; i < fade; i++) out[out.length - fade + i] *= 1 - (i + 1) / fade;
   return out;
 }
 
-export function karplusStrong(freq: number, sampleRate: number, seconds: number, decay = 0.996, rand: () => number = Math.random): Float32Array {
+export function karplusStrong(
+  freq: number,
+  sampleRate: number,
+  seconds: number,
+  decay = 0.996,
+  rand: () => number = Math.random,
+  /** take the noise burst's mean out: the loop keeps a DC offset, which is inaudible */
+  zeroMean = false,
+): Float32Array {
   const n = Math.floor(sampleRate * seconds);
   const period = ksPeriod(freq, sampleRate);
   const ring = new Float32Array(period);
   for (let i = 0; i < period; i++) ring[i] = rand() * 2 - 1;
+  if (zeroMean) {
+    const mean = ring.reduce((a, v) => a + v, 0) / period;
+    for (let i = 0; i < period; i++) ring[i] -= mean;
+  }
   const out = new Float32Array(n);
   let idx = 0;
   for (let i = 0; i < n; i++) {

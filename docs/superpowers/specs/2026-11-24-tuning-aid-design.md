@@ -71,6 +71,7 @@ The pitch control sits in the settings bar, not in the panel, because it changes
   - The tuning note uses the same plucked-string sound as playback, tuned to the standard.
   - It rings audibly for about 5 seconds on every course. The sound fades much faster on high notes than on low ones, so each note's fade is set from its pitch so that every course reaches the same quiet level at about 5 seconds.
   - Tab and chord notes keep their current length and fade.
+  - How much of a high note is left at 5 s depends on its random noise burst. The tuning note's burst has its mean taken out (the DC it would leave is inaudible), and a burst that would leave a weak ring is drawn again (found in review: about 1 render of course 1 in 6 fell below −30 dB).
 - **Exact pitch:**
   - The plucked-string sound repeats every whole number of samples, less the half sample its smoothing step takes. The note actually sounds at `sampleRate / (period − 0.5)`.
   - This was checked by measuring rendered notes: it agrees to 0.01 cents at 98–660 Hz, 44.1 and 48 kHz, and for any fade.

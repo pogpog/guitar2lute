@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { karplusStrong, midiToFreq, playbackRateFor, renderTuningNote, TUNING_SECONDS } from '../../src/audio/pluck';
-import { cents, measureFundamental, rms, seeded } from './measure';
+import { acRms, cents, measureFundamental, rms, seeded } from './measure';
 
 /** lowest diapason (A1) to the top course (G4) */
 const NOTES = [33, 43, 55, 62, 64, 67];
@@ -30,12 +30,27 @@ describe('pitch', () => {
           const buf = renderTuningNote(midiToFreq(m, a4), sr, seeded());
           expect(buf.length).toBe(TUNING_SECONDS * sr);
           const q = Math.floor(sr * 0.25);
-          const db = 20 * Math.log10(rms(buf.subarray(5 * sr - q, 5 * sr)) / rms(buf.subarray(0, q)));
+          const db = 20 * Math.log10(acRms(buf.subarray(5 * sr - q, 5 * sr)) / acRms(buf.subarray(0, q)));
           expect(db, `${m}@${a4}`).toBeGreaterThanOrEqual(-30);
         }
       }
     });
   }
+  it('every top course rings clearly to 5 s, whatever the random pluck', () => {
+    // course 1 of each preset (G4, F4, E4, D4): the weakest at 5 s. DC is inaudible, so it is left out.
+    for (const sr of [44100, 48000]) {
+      for (const a4 of [415, 440, 480]) {
+        for (const m of [67, 65, 64, 62]) {
+          for (let k = 0; k < 20; k++) {
+            const buf = renderTuningNote(midiToFreq(m, a4), sr);
+            const q = Math.floor(sr * 0.25);
+            const db = 20 * Math.log10(acRms(buf.subarray(5 * sr - q, 5 * sr)) / acRms(buf.subarray(0, q)));
+            expect(db, `${m}@${a4} ${sr} Hz`).toBeGreaterThanOrEqual(-30);
+          }
+        }
+      }
+    }
+  }, 30_000);
   it('the tuning note fades to silence at its end', () => {
     const buf = renderTuningNote(196, 8000, seeded());
     expect(Math.abs(buf[buf.length - 1])).toBeLessThan(1e-3);

@@ -28,6 +28,11 @@ export function measureFundamental(x: Float32Array, sr: number, approx: number):
 
 export const cents = (a: number, b: number) => 1200 * Math.log2(a / b);
 export const rms = (a: Float32Array) => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / a.length);
+/** RMS with the mean (DC, which is inaudible) taken out */
+export const acRms = (a: Float32Array) => {
+  const mean = a.reduce((s, v) => s + v, 0) / a.length;
+  return Math.sqrt(a.reduce((s, v) => s + (v - mean) ** 2, 0) / a.length);
+};
 
 /** A repeatable random source for the pluck's noise burst. */
 export function seeded(seed = 7): () => number {
